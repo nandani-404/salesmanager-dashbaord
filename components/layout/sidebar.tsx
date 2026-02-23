@@ -11,7 +11,6 @@ import {
   Truck,
   Navigation,
   BarChart3,
-  Settings,
   ChevronLeft,
   Users,
   PackagePlus,
@@ -27,7 +26,6 @@ const menuItems = [
   { icon: Navigation, label: "In Transit", href: "/in-transit" },
   { icon: BarChart3, label: "Reports", href: "/reports" },
   { icon: User, label: "Profile", href: "/profile" },
-  { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
 export interface SidebarProps {

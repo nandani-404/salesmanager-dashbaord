@@ -1,4 +1,5 @@
-export const BASE_URL = "https://devtruckmitr.in";
+// export const BASE_URL = "https://devtruckmitr.in";
+export const BASE_URL = "https://development.truckmitr.com";
 
 export const API_ENDPOINTS = {
     dashboard: {

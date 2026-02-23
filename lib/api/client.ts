@@ -1,8 +1,9 @@
 import axios from "axios";
 import Cookies from "js-cookie";
+import { BASE_URL } from "@/config/page";
 
 const apiClient = axios.create({
-    baseURL: "",
+    baseURL: BASE_URL,
     headers: {
         "Content-Type": "application/json",
     },

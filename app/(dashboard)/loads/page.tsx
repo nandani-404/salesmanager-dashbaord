@@ -1,25 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { mockLoads } from "@/lib/mock-data";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Search, Filter, Download, Eye, Edit, MapPin } from "lucide-react";
+import { Search, Filter, Download, Eye, Edit, MapPin, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import apiClient from "@/lib/api/client";
+
+interface AcceptedLoad {
+  load_id: number;
+  company_name: string;
+  transport_name: string;
+  origin_location: string;
+  destination_location: string;
+  material_name: string;
+  picup_date: string;
+  trucker_price: number;
+  shipper_price: number;
+  commission: number;
+}
 
 export default function LoadsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [loads, setLoads] = useState<AcceptedLoad[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredLoads = mockLoads.filter((load) => {
+  useEffect(() => {
+    fetchAcceptedLoads();
+  }, []);
+
+  const fetchAcceptedLoads = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiClient.get("/api/dashboard/accepted-loads");
+      
+      if (response.data.status && response.data.data) {
+        setLoads(response.data.data);
+      } else {
+        setError("Failed to fetch accepted loads");
+      }
+    } catch (err: any) {
+      console.error("Error fetching accepted loads:", err);
+      setError(err.response?.data?.message || "Failed to fetch accepted loads");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredLoads = loads.filter((load) => {
     const matchesSearch =
-      load.loadNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      load.shipperName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || load.status === statusFilter;
+      (load.load_id || "").toString().toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (load.company_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (load.transport_name || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "all";
     return matchesSearch && matchesStatus;
   });
 
@@ -38,6 +79,32 @@ export default function LoadsPage() {
           Export
         </Button>
       </div>
+
+      {/* Loading State */}
+      {loading && (
+        <Card className="p-12">
+          <div className="flex flex-col items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <p className="mt-4 text-sm text-gray-600">Loading accepted loads...</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <Card className="p-6">
+          <div className="text-center">
+            <p className="text-red-600">{error}</p>
+            <Button onClick={fetchAcceptedLoads} className="mt-4" variant="outline">
+              Retry
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Content */}
+      {!loading && !error && (
+        <>
 
       {/* Filters */}
       <Card className="p-4">
@@ -111,55 +178,53 @@ export default function LoadsPage() {
             <tbody className="divide-y divide-gray-200 bg-white">
               {filteredLoads.map((load, index) => (
                 <motion.tr
-                  key={load.id}
+                  key={load.load_id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: index * 0.05 }}
                   className="hover:bg-gray-50 transition-colors"
                 >
                   <td className="whitespace-nowrap px-6 py-4">
-                    <span className="font-medium text-gray-700 text-base">{load.loadNumber}</span>
+                    <span className="font-medium text-gray-700 text-base">{load.load_id}</span>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
-                    <span className="font-semibold text-gray-900 text-base">{load.shipperName}</span>
+                    <span className="font-semibold text-gray-900 text-base">{load.company_name}</span>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
-                    <span className="font-semibold text-gray-900 text-base">Kumar Transport Services</span>
+                    <span className="font-semibold text-gray-900 text-base">{load.transport_name}</span>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1 text-sm text-gray-600">
-                      <span>
-                        {load.origin.city}, {load.origin.state}
+                  <td className="px-6 py-4 max-w-xs">
+                    <div className="flex items-center gap-1 text-sm text-gray-600 overflow-x-auto whitespace-nowrap max-h-12 overflow-y-hidden">
+                      <span className="line-clamp-2 whitespace-normal">
+                        {load.origin_location}
                       </span>
-                      <span>→</span>
-                      <span>
-                        {load.destination.city}, {load.destination.state}
+                      <span className="flex-shrink-0">→</span>
+                      <span className="line-clamp-2 whitespace-normal">
+                        {load.destination_location}
                       </span>
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
                     <div className="text-sm">
-                      <div className="font-medium text-gray-700">{load.cargo.category}</div>
-                      <div className="text-gray-600">{load.cargo.type}</div>
-                      <div className="text-gray-500">{load.cargo.weight} lbs</div>
+                      <div className="font-medium text-gray-700">{load.material_name}</div>
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                    {formatDate(load.pickupDate)}
+                    {load.picup_date ? formatDate(load.picup_date) : "N/A"}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
-                    <Badge variant={load.status}>{load.status}</Badge>
+                    <Badge variant="confirmed">Accepted</Badge>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-blue-600">
-                    {formatCurrency(load.revenue)}
+                    {formatCurrency(load.shipper_price)}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-indigo-600">
-                    {formatCurrency(load.revenue * 0.95)}
+                    {formatCurrency(load.trucker_price)}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => router.push(`/loads/${load.id}`)}
+                        onClick={() => router.push(`/loads/${load.load_id}`)}
                         className="rounded p-1 hover:bg-gray-100 transition-colors"
                         title="View Details"
                       >
@@ -182,7 +247,7 @@ export default function LoadsPage() {
         {/* Pagination */}
         <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
           <div className="text-sm text-gray-600">
-            Showing {filteredLoads.length} of {mockLoads.length} loads
+            Showing {filteredLoads.length} of {loads.length} loads
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm">
@@ -194,6 +259,8 @@ export default function LoadsPage() {
           </div>
         </div>
       </Card>
+      </>
+      )}
     </div>
   );
 }

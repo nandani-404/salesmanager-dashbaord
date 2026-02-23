@@ -320,6 +320,7 @@ export default function TruckersPage() {
                         </Button>
                         <Button
                           className="rounded-lg bg-[#2563eb] hover:bg-blue-700 text-white h-10 font-bold text-xs flex items-center justify-center gap-2 px-0 shadow-md shadow-blue-50"
+                          onClick={() => router.push(`/truckers/${t.id}/vehicles`)}
                         >
                           <Truck className="h-3.5 w-3.5 text-white" />
                           Trucks

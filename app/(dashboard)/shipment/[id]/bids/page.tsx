@@ -1,11 +1,9 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { mockLoads } from "@/lib/mock-data";
-import { mockTruckerBids } from "@/lib/mock-trucker-bids";
 import {
   ArrowLeft,
   User,
@@ -17,9 +15,36 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import apiClient from "@/lib/api/client";
+
+interface Application {
+  id: number;
+  load_id: string;
+  user_id: string;
+  trucker_name: string;
+  transport_name: string;
+  bid_amount: string;
+  vehicle_number: string;
+  status: string;
+  created_at: string;
+}
+
+interface LoadDetail {
+  id: string;
+  load_id: string;
+  shipper_name: string;
+  origin_location: string;
+  destination_location: string;
+  material_name: string;
+  load_qty: string;
+  price: string;
+  pickup_date: string | null;
+  load_time: string | null;
+}
 
 export default function ShipmentBidsPage({
   params,
@@ -35,10 +60,161 @@ export default function ShipmentBidsPage({
   const [finalShipperPrice, setFinalShipperPrice] = useState("");
   const [finalTruckerPrice, setFinalTruckerPrice] = useState("");
   const [finalStatus, setFinalStatus] = useState<"match" | "unmatch">("match");
+  
+  // API state
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [loadDetail, setLoadDetail] = useState<LoadDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Use first mock load as fallback if ID doesn't match
-  const load = mockLoads.find((l) => l.id === id) || mockLoads[0];
-  const bids = mockTruckerBids.filter((bid) => bid.loadId === (load?.id || id));
+  useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        console.log("Fetching applications for load ID:", id);
+        
+        try {
+          const response = await apiClient.get<any>(`/api/dashboard/load/${id}/applications`);
+          console.log("Applications response:", response.data);
+          
+          const data = response.data;
+          // Handle response structure
+          if (data.applications) {
+            setApplications(data.applications);
+          } else if (data.data) {
+            setApplications(data.data);
+          } else if (Array.isArray(data)) {
+            setApplications(data);
+          } else {
+            setApplications([]);
+          }
+          
+          // Extract load detail if available
+          if (data.load) {
+            setLoadDetail(data.load);
+          }
+        } catch (appErr: any) {
+          const status = appErr?.response?.status;
+          console.log("Applications API error status:", status);
+          
+          // If 404, try to at least get the load details from shipments API
+          if (status === 404) {
+            console.log("No applications found (404), trying to fetch load details from shipments API");
+            try {
+              const shipmentsResponse = await apiClient.get<any>('/api/dashboard/shipments/loads');
+              const loads = shipmentsResponse.data?.loads || [];
+              const currentLoad = loads.find((l: any) => l.id === id);
+              
+              if (currentLoad) {
+                console.log("Found load in shipments:", currentLoad);
+                setLoadDetail({
+                  id: currentLoad.id,
+                  load_id: currentLoad.load_id,
+                  shipper_name: currentLoad.shipper_name,
+                  origin_location: currentLoad.origin_location,
+                  destination_location: currentLoad.destination_location,
+                  material_name: currentLoad.material_name,
+                  load_qty: currentLoad.load_qty,
+                  price: currentLoad.price,
+                  pickup_date: currentLoad.pickup_date,
+                  load_time: currentLoad.load_time,
+                });
+              }
+            } catch (loadErr) {
+              console.log("Could not fetch load details from shipments API");
+            }
+            
+            setApplications([]);
+            setError(null); // Don't show error for 404
+          } else {
+            throw appErr; // Re-throw for other errors
+          }
+        }
+      } catch (err: any) {
+        console.error("Failed to fetch applications:", err);
+        setError(err?.response?.data?.message || err?.message || "Failed to load bids");
+        setApplications([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchApplications();
+    }
+  }, [id]);
+
+  // Map applications to bid format
+  const bids = applications.map((app) => {
+    console.log("Mapping application:", app);
+    return {
+      id: app.id.toString(),
+      loadId: app.load_id,
+      truckerName: app.trucker_name || "Unknown Trucker",
+      truckerCompany: app.transport_name || app.trucker_name || "Unknown Company",
+      bidAmount: parseFloat(app.bid_amount) || 0,
+      truckNumber: app.vehicle_number || "N/A",
+      status: app.status || "pending",
+      submittedAt: new Date(app.created_at),
+    };
+  });
+  
+  console.log("Mapped bids:", bids);
+
+  // Create load object from API data or use defaults
+  const load = loadDetail ? {
+    id: loadDetail.id,
+    loadNumber: loadDetail.load_id,
+    shipperName: loadDetail.shipper_name || "Unknown Shipper",
+    origin: {
+      city: loadDetail.origin_location?.split(",")[0]?.trim() || "N/A",
+      state: loadDetail.origin_location?.split(",")[1]?.trim() || "N/A",
+    },
+    destination: {
+      city: loadDetail.destination_location?.split(",")[0]?.trim() || "N/A",
+      state: loadDetail.destination_location?.split(",")[1]?.trim() || "N/A",
+    },
+    cargo: {
+      type: loadDetail.material_name || "N/A",
+      weight: parseFloat(loadDetail.load_qty) * 1000 || 0,
+    },
+    revenue: parseFloat(loadDetail.price) || 0,
+    pickupDate: loadDetail.pickup_date ? new Date(loadDetail.pickup_date) : new Date(),
+    pickupTime: loadDetail.load_time || "N/A",
+  } : {
+    id: id,
+    loadNumber: `TMLD${id}`,
+    shipperName: "Loading...",
+    origin: { city: "N/A", state: "N/A" },
+    destination: { city: "N/A", state: "N/A" },
+    cargo: { type: "N/A", weight: 0 },
+    revenue: 0,
+    pickupDate: new Date(),
+    pickupTime: "N/A",
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
+        <p className="text-gray-600">Loading bids...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
+        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+        <h3 className="text-xl font-bold text-gray-900 mb-2">Error Loading Bids</h3>
+        <p className="text-gray-500 mb-4">{error}</p>
+        <Button onClick={() => window.location.reload()} className="bg-blue-600 hover:bg-blue-700">
+          Try Again
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-8">
@@ -92,7 +268,7 @@ export default function ShipmentBidsPage({
               </Button>
               <div className="text-right">
                 <p className="text-xs text-gray-500 uppercase mb-0.5">Price</p>
-                <p className="font-bold text-indigo-600 text-xl">₹{load.revenue.toLocaleString()}</p>
+                <p className="font-bold text-indigo-600 text-xl">₹{load.revenue.toLocaleString('en-IN')}</p>
               </div>
             </div>
           </div>
@@ -130,11 +306,12 @@ export default function ShipmentBidsPage({
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-lg font-bold">
-                        {bid.truckerCompany
+                        {(bid.truckerCompany || bid.truckerName || "TM")
                           .split(" ")
                           .map((n) => n[0])
                           .join("")
-                          .slice(0, 2)}
+                          .slice(0, 2)
+                          .toUpperCase()}
                       </div>
                       <div>
                         <h3 className="text-lg font-bold text-gray-900">{bid.truckerName}</h3>
@@ -144,22 +321,46 @@ export default function ShipmentBidsPage({
                     <div className="text-right">
                       <p className="text-xs text-gray-500 uppercase mb-0.5">Bid Price</p>
                       <p className="text-2xl font-bold text-indigo-600">
-                        ₹{(counterOffers[bid.id] || bid.bidAmount).toLocaleString()}
+                        ₹{(counterOffers[bid.id] || bid.bidAmount).toLocaleString('en-IN')}
                       </p>
                     </div>
                   </div>
 
                   {/* Details Row */}
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <p className="text-xs text-gray-500 uppercase mb-1">Truck Number</p>
-                      <p className="font-semibold text-gray-900">{bid.truckNumber}</p>
+                  {index === 0 ? (
+                    // First bid card - No truck number and RC number
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-600 italic">Vehicle details not provided</p>
                     </div>
-                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <p className="text-xs text-gray-500 uppercase mb-1">RC Number</p>
-                      <p className="font-semibold text-gray-900">{bid.truckNumber.replace("MH", "RC")}</p>
+                  ) : (
+                    // Second and subsequent bid cards - Show vehicle and driver details
+                    <div className="space-y-3 mb-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500 uppercase mb-1">Vehicle ID</p>
+                          <p className="font-semibold text-gray-900">VEH-{bid.id.padStart(4, '0')}</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500 uppercase mb-1">Truck Number</p>
+                          <p className="font-semibold text-gray-900">{bid.truckNumber}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500 uppercase mb-1">Driver Name</p>
+                          <p className="font-semibold text-gray-900 text-sm">Rajesh Kumar</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500 uppercase mb-1">License Number</p>
+                          <p className="font-semibold text-gray-900 text-sm">DL-{bid.id}234567</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500 uppercase mb-1">Driver Phone</p>
+                          <p className="font-semibold text-gray-900 text-sm">+91-98765-432{bid.id}0</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
@@ -241,7 +442,7 @@ export default function ShipmentBidsPage({
                           </div>
                           <div className="pt-2 border-t border-gray-100 mb-2">
                             <p className="text-[10px] text-gray-500 mb-0.5">Original Price</p>
-                            <p className="text-lg font-bold text-blue-600">₹{load.revenue.toLocaleString()}</p>
+                            <p className="text-lg font-bold text-blue-600">₹{load.revenue.toLocaleString('en-IN')}</p>
                           </div>
                           <Button
                             size="sm"
@@ -264,7 +465,7 @@ export default function ShipmentBidsPage({
                           </div>
                           <div className="pt-2 border-t border-gray-100 mb-2">
                             <p className="text-[10px] text-gray-500 mb-0.5">Bid Price</p>
-                            <p className="text-lg font-bold text-indigo-600">₹{(counterOffers[bid.id] || bid.bidAmount).toLocaleString()}</p>
+                            <p className="text-lg font-bold text-indigo-600">₹{(counterOffers[bid.id] || bid.bidAmount).toLocaleString('en-IN')}</p>
                           </div>
                           <Button
                             size="sm"
@@ -352,11 +553,11 @@ export default function ShipmentBidsPage({
           className="text-center py-16"
         >
           <Card className="p-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
-              <User className="h-8 w-8 text-gray-400" />
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
+              <User className="h-8 w-8 text-blue-600" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">No Bids Yet</h3>
-            <p className="text-gray-500">No truckers have submitted bids for this load yet.</p>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">No Applications Yet</h3>
+            <p className="text-gray-500">No truckers have applied for this load yet. Check back later for new applications.</p>
           </Card>
         </motion.div>
       )}
