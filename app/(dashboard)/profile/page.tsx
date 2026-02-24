@@ -15,15 +15,18 @@ interface EmployeeData {
   full_name: string;
   email: string;
   mobile: string;
-  department: string;
+  department_id: string;
+  department_name: string;
   designation: string;
   doj: string;
   work_location: string;
   current_address: string;
   city: string;
-  state: string;
+  state_id: string;
+  state_name: string;
   pin: string;
   photo_path?: string;
+  photo_url?: string;
 }
 
 export default function ProfilePage() {
@@ -31,6 +34,8 @@ export default function ProfilePage() {
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editedData, setEditedData] = useState<Partial<EmployeeData>>({});
 
   useEffect(() => {
     const fetchEmployeeData = async () => {
@@ -58,12 +63,30 @@ export default function ProfilePage() {
     fetchEmployeeData();
   }, []);
 
-  const InfoRow = ({ label, value }: { label: string; value: string }) => (
-    <div className="flex flex-col space-y-1 py-3 border-b border-gray-100 last:border-0">
-      <span className="text-xs text-gray-500 uppercase font-medium">{label}</span>
-      <span className="text-sm font-semibold text-gray-900">{value}</span>
-    </div>
-  );
+  const renderInfoRow = (label: string, value: string, field?: keyof EmployeeData) => {
+    const currentValue = field && isEditMode && editedData[field] !== undefined 
+      ? String(editedData[field]) 
+      : value;
+    
+    return (
+      <div key={field || label} className="flex flex-col space-y-1 py-3 border-b border-gray-100 last:border-0">
+        <span className="text-xs text-gray-500 uppercase font-medium">{label}</span>
+        {isEditMode && field ? (
+          <input
+            type="text"
+            value={currentValue}
+            onChange={(e) => {
+              const newValue = e.target.value;
+              setEditedData(prev => ({ ...prev, [field]: newValue }));
+            }}
+            className="text-sm font-semibold text-gray-900 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        ) : (
+          <span className="text-sm font-semibold text-gray-900">{value}</span>
+        )}
+      </div>
+    );
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -72,6 +95,72 @@ export default function ProfilePage() {
       console.log("Image selected:", file);
       alert("Image upload functionality will be implemented");
     }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!employeeData) return;
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      // Merge edited data with existing data
+      const updatedData = {
+        full_name: editedData.full_name || employeeData.full_name,
+        mobile: editedData.mobile || employeeData.mobile,
+        email: editedData.email || employeeData.email,
+        department_id: editedData.department_id || employeeData.department_id,
+        designation: editedData.designation || employeeData.designation,
+        doj: editedData.doj || employeeData.doj,
+        work_location: editedData.work_location || employeeData.work_location,
+        current_address: editedData.current_address || employeeData.current_address,
+        city: editedData.city || employeeData.city,
+        state_id: editedData.state_id || employeeData.state_id,
+        pin: editedData.pin || employeeData.pin,
+      };
+
+      const response = await apiClient.post(`/api/dashboard/employees/${employeeData.id}/update`, updatedData);
+
+      if (response.data && response.data.status) {
+        // Update local state with new data
+        setEmployeeData({ ...employeeData, ...updatedData });
+        setEditedData({});
+        setIsEditMode(false);
+        alert("Profile updated successfully!");
+      } else {
+        setError("Failed to update profile");
+      }
+    } catch (err: any) {
+      console.error("Error updating profile:", err);
+      setError(err.response?.data?.message || err.message || "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditedData({});
+    setIsEditMode(false);
+  };
+
+  const handleEnterEditMode = () => {
+    // Initialize editedData with current values when entering edit mode
+    if (employeeData) {
+      setEditedData({
+        full_name: employeeData.full_name,
+        mobile: employeeData.mobile,
+        email: employeeData.email,
+        department_id: employeeData.department_id,
+        designation: employeeData.designation,
+        doj: employeeData.doj,
+        work_location: employeeData.work_location,
+        current_address: employeeData.current_address,
+        city: employeeData.city,
+        state_id: employeeData.state_id,
+        pin: employeeData.pin,
+      });
+    }
+    setIsEditMode(true);
   };
 
   const getInitials = (name: string) => {
@@ -147,7 +236,7 @@ export default function ProfilePage() {
                   {employeeData?.photo_path ? (
                     <div className="-mt-16 h-32 w-32 rounded-full border-4 border-white shadow-lg overflow-hidden bg-white">
                       <Image
-                        src={`${BASE_URL}/${employeeData.photo_path}`}
+                        src={`${BASE_URL}/storage/app/public/${employeeData.photo_path}`}
                         alt={employeeData.full_name || "Profile"}
                         width={128}
                         height={128}
@@ -190,44 +279,51 @@ export default function ProfilePage() {
                   <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
                     <div className="flex items-center gap-1">
                       <User className="h-4 w-4" />
-                      {employeeData?.department || "N/A"} Department
+                      {employeeData?.department_name || "N/A"} Department
                     </div>
                     <div className="flex items-center gap-1">
                       <MapPin className="h-4 w-4" />
-                      {employeeData?.city || "N/A"}, {employeeData?.state || "N/A"}
+                      {employeeData?.city || "N/A"}, {employeeData?.state_name || "N/A"}
                     </div>
                   </div>
                 </div>
               </div>
-              <Button 
-                className="mt-4 sm:mt-0"
-                onClick={() => setIsEditMode(!isEditMode)}
-                variant={isEditMode ? "outline" : "primary"}
-              >
+              <div className="flex gap-2">
                 {isEditMode ? (
                   <>
-                    <X className="mr-2 h-4 w-4" />
-                    Cancel
+                    <Button 
+                      onClick={handleSaveProfile}
+                      disabled={saving}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save Changes"
+                      )}
+                    </Button>
+                    <Button 
+                      onClick={handleCancelEdit}
+                      variant="outline"
+                      disabled={saving}
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      Cancel
+                    </Button>
                   </>
                 ) : (
-                  <>
+                  <Button 
+                    onClick={handleEnterEditMode}
+                  >
                     <Edit className="mr-2 h-4 w-4" />
                     Edit Profile
-                  </>
+                  </Button>
                 )}
-              </Button>
+              </div>
             </div>
-            {isEditMode && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200"
-              >
-                <p className="text-sm text-blue-800 font-medium">
-                  Click the camera icon on your profile picture to upload a new image
-                </p>
-              </motion.div>
-            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -247,14 +343,14 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-2 gap-x-8">
-              <InfoRow label="Full Name" value={employeeData?.full_name || "N/A"} />
-              <InfoRow label="Email" value={employeeData?.email || "N/A"} />
-              <InfoRow label="Mobile" value={employeeData?.mobile || "N/A"} />
-              <InfoRow label="Employee ID" value={employeeData?.emp_id || "N/A"} />
-              <InfoRow label="Department" value={employeeData?.department || "N/A"} />
-              <InfoRow label="Designation" value={employeeData?.designation || "N/A"} />
-              <InfoRow label="Date of Joining" value={formatDate(employeeData?.doj || "")} />
-              <InfoRow label="Work Location" value={employeeData?.work_location || "N/A"} />
+              {renderInfoRow("Full Name", employeeData?.full_name || "N/A", "full_name")}
+              {renderInfoRow("Email", employeeData?.email || "N/A", "email")}
+              {renderInfoRow("Mobile", employeeData?.mobile || "N/A", "mobile")}
+              {renderInfoRow("Employee ID", employeeData?.emp_id || "N/A")}
+              {renderInfoRow("Department", employeeData?.department_name || "N/A", "department_id")}
+              {renderInfoRow("Designation", employeeData?.designation || "N/A", "designation")}
+              {renderInfoRow("Date of Joining", formatDate(employeeData?.doj || ""), "doj")}
+              {renderInfoRow("Work Location", employeeData?.work_location || "N/A", "work_location")}
             </div>
           </CardContent>
         </Card>
@@ -276,14 +372,11 @@ export default function ProfilePage() {
           <CardContent>
             <div className="grid md:grid-cols-2 gap-x-8">
               <div className="md:col-span-2">
-                <InfoRow 
-                  label="Current Address" 
-                  value={employeeData?.current_address || "N/A"} 
-                />
+                {renderInfoRow("Current Address", employeeData?.current_address || "N/A", "current_address")}
               </div>
-              <InfoRow label="City" value={employeeData?.city || "N/A"} />
-              <InfoRow label="State" value={employeeData?.state || "N/A"} />
-              <InfoRow label="PIN Code" value={employeeData?.pin || "N/A"} />
+              {renderInfoRow("City", employeeData?.city || "N/A", "city")}
+              {renderInfoRow("State", employeeData?.state_name || "N/A", "state_id")}
+              {renderInfoRow("PIN Code", employeeData?.pin || "N/A", "pin")}
             </div>
           </CardContent>
         </Card>
