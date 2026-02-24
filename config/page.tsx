@@ -10,7 +10,11 @@ export const API_ENDPOINTS = {
         shipperUpdateStatus: (shipperId: string | number) => `/api/dashboard/shipper/${shipperId}/update-status`,
         transporters: "/api/dashboard/transporters",
         truckerDetail: (id: string | number) => `/api/dashboard/trucker/${id}`,
+        truckerUpdateStatus: (id: string | number) => `/api/dashboard/trucker/${id}/update-status`,
         shipmentsLoads: "/api/dashboard/shipments/loads",
+        applicationUpdate: "/api/dashboard/application/update",
+        dashboardSummary: "/api/dashboard/dashboard-summary",
+        userSearch: (query: string) => `/dashboard/users/search?query=${encodeURIComponent(query)}`,
     },
     auth: {
         login: "/api/sales-login",

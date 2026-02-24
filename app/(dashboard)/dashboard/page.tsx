@@ -7,6 +7,10 @@ import { mockLoads } from "@/lib/mock-data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import apiClient from "@/lib/api/client";
+import { API_ENDPOINTS, BASE_URL } from "@/config/page";
 import {
   LineChart,
   Line,
@@ -155,89 +159,239 @@ function TruckIcon({ className }: { className?: string }) {
   );
 }
 
-/* ── Data ── */
-
-const revenueData = [
-  { month: "Jun", revenue: 3500000 },
-  { month: "Jul", revenue: 4100000 },
-  { month: "Aug", revenue: 3800000 },
-  { month: "Sep", revenue: 4800000 },
-  { month: "Oct", revenue: 4600000 },
-  { month: "Nov", revenue: 5300000 },
-];
-
-const routeData = [
-  { route: "MUM-DEL", loads: 45 },
-  { route: "BLR-HYD", loads: 38 },
-  { route: "KOL-PUN", loads: 32 },
-  { route: "CHE-BLR", loads: 28 },
-];
-
-const recentShippers = [
-  { id: "1", name: "Bharat Logistics", company: "Bharat Logistics Pvt Ltd", location: "Mumbai", date: "20 Nov 2024" },
-  { id: "2", name: "Express Transport", company: "Express Transport Solutions", location: "Bangalore", date: "18 Nov 2024" },
-  { id: "3", name: "North India Cargo", company: "North India Cargo Services", location: "Delhi", date: "15 Nov 2024" },
-  { id: "4", name: "South Freight", company: "South Freight Co", location: "Chennai", date: "12 Nov 2024" },
-  { id: "5", name: "Western Logistics", company: "Western Logistics Hub", location: "Pune", date: "10 Nov 2024" },
-];
-
-const recentTruckers = [
-  { id: "1", name: "Rajesh Kumar", company: "Kumar Transport", location: "Mumbai", date: "20 Nov 2024" },
-  { id: "2", name: "Amit Sharma", company: "Sharma Logistics", location: "Bangalore", date: "19 Nov 2024" },
-  { id: "3", name: "Suresh Patel", company: "Patel Freight", location: "Kolkata", date: "17 Nov 2024" },
-  { id: "4", name: "Vikram Singh", company: "Singh Express", location: "Delhi", date: "14 Nov 2024" },
-  { id: "5", name: "Arjun Mehta", company: "Mehta Transport", location: "Ahmedabad", date: "11 Nov 2024" },
-];
-
 export default function DashboardPage() {
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const fetchDashboardSummary = async () => {
+      try {
+        setLoading(true);
+        setApiError(null);
+        const response = await apiClient.get(API_ENDPOINTS.dashboard.dashboardSummary);
+        console.log("Dashboard summary response:", response.data);
+        // Extract data from nested structure
+        const apiData = response.data?.data || response.data;
+        setDashboardData(apiData);
+      } catch (error: any) {
+        console.error("Failed to fetch dashboard summary:", error);
+        const errorMessage = error?.response?.data?.message || error?.message || "Failed to load dashboard data";
+        setApiError(errorMessage);
+        // Set empty data structure to prevent errors
+        setDashboardData({
+          load_counts: { open_load_count: "0", completed_count: "0" },
+          recent_shippers: [],
+          recent_transporters: [],
+          recent_post_loads: []
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (mounted) {
+      fetchDashboardSummary();
+    }
+  }, [mounted]);
+
+  const handleShipperClick = async (shipperId: string) => {
+    // Navigate directly to shippers page with profile query parameter
+    // The shippers page will fetch the full details
+    router.push(`/shippers?profile=${shipperId}`);
+  };
+
+  const handleTruckerClick = async (truckerId: string) => {
+    try {
+      // Fetch trucker details before navigation
+      await apiClient.get(API_ENDPOINTS.dashboard.truckerDetail(truckerId));
+      // Navigate to truckers page with the trucker ID
+      router.push(`/truckers/${truckerId}`);
+    } catch (error) {
+      console.error("Failed to fetch trucker details:", error);
+      // Navigate anyway even if API fails
+      router.push(`/truckers/${truckerId}`);
+    }
+  };
+
+  if (!mounted) {
+    return null;
+  }
+
   const stats = [
     {
       title: "Total Revenue",
-      value: formatCurrency(5300000),
-      change: "↑ 12.5% from last month",
+      value: loading ? "..." : formatCurrency(parseFloat(dashboardData?.total_revenue || "0") || 0),
+      
       changeType: "positive" as const,
       icon: IndianRupeeIcon,
     },
     {
       title: "Active Loads",
-      value: "24",
-      change: "8 pending assignment",
+      value: loading ? "..." : (dashboardData?.load_counts?.open_load_count || "0").toString(),
+      change: "Open loads",
       changeType: "neutral" as const,
       icon: PackageIcon,
     },
     {
       title: "Completed Deliveries",
-      value: "156",
-      change: "↑ 8% from last month",
+      value: loading ? "..." : (dashboardData?.load_counts?.completed_count || "0").toString(),
+      change: "Total completed",
       changeType: "positive" as const,
       icon: CheckCircleIcon,
     },
     {
       title: "Avg Delivery Time",
-      value: "3.2 days",
+      value: loading ? "..." : (dashboardData?.avg_delivery_time || "3.2 days"),
       change: "↓ 0.3 days improvement",
       changeType: "positive" as const,
       icon: ClockIcon,
     },
   ];
 
+  /* ── Data ── */
+
+  // Format month_wise_revenue data for the chart
+  const revenueData = (dashboardData?.month_wise_revenue && dashboardData.month_wise_revenue.length > 0)
+    ? dashboardData.month_wise_revenue.map((item: any) => {
+        // Parse month from "2026-02" format to "Feb" format
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const [year, monthNum] = item.month.split("-");
+        const monthIndex = parseInt(monthNum) - 1;
+        const monthName = monthNames[monthIndex] || monthNum;
+        
+        return {
+          month: monthName,
+          revenue: parseFloat(item.total || "0")
+        };
+      })
+    : [
+        { month: "Jun", revenue: 3500000 },
+        { month: "Jul", revenue: 4100000 },
+        { month: "Aug", revenue: 3800000 },
+        { month: "Sep", revenue: 4800000 },
+        { month: "Oct", revenue: 4600000 },
+        { month: "Nov", revenue: 5300000 },
+      ];
+
+  const routeData = dashboardData?.route_data || [
+    { route: "MUM-DEL", loads: 45 },
+    { route: "BLR-HYD", loads: 38 },
+    { route: "KOL-PUN", loads: 32 },
+    { route: "CHE-BLR", loads: 28 },
+  ];
+
+  const recentShippers = (dashboardData?.recent_shippers && dashboardData.recent_shippers.length > 0) 
+    ? dashboardData.recent_shippers.map((shipper: any) => {
+        let formattedDate = "N/A";
+        try {
+          if (shipper.created_at) {
+            const date = new Date(shipper.created_at);
+            formattedDate = date.toLocaleString("en-US", { 
+              month: "short", 
+              day: "numeric", 
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true
+            });
+          }
+        } catch (e) {
+          formattedDate = shipper.created_at || "N/A";
+        }
+        
+        return {
+          id: shipper.id.toString(),
+          name: shipper.name,
+          company: shipper.name,
+          tmId: shipper.unique_id || `TMSH${shipper.id}`,
+          location: shipper.state_name || "N/A",
+          date: formattedDate,
+          image: shipper.images ? `${BASE_URL}/public/${shipper.images}` : null
+        };
+      })
+    : [
+        { id: "1", name: "Bharat Logistics", company: "Bharat Logistics Pvt Ltd", tmId: "TMSH001", location: "Mumbai", date: "20 Nov 2024", image: null },
+        { id: "2", name: "Express Transport", company: "Express Transport Solutions", tmId: "TMSH002", location: "Bangalore", date: "18 Nov 2024", image: null },
+        { id: "3", name: "North India Cargo", company: "North India Cargo Services", tmId: "TMSH003", location: "Delhi", date: "15 Nov 2024", image: null },
+        { id: "4", name: "South Freight", company: "South Freight Co", tmId: "TMSH004", location: "Chennai", date: "12 Nov 2024", image: null },
+        { id: "5", name: "Western Logistics", company: "Western Logistics Hub", tmId: "TMSH005", location: "Pune", date: "10 Nov 2024", image: null },
+      ];
+
+  const recentTruckers = (dashboardData?.recent_transporters && dashboardData.recent_transporters.length > 0)
+    ? dashboardData.recent_transporters.map((trucker: any) => {
+        let formattedDate = "N/A";
+        try {
+          if (trucker.created_at) {
+            const date = new Date(trucker.created_at);
+            formattedDate = date.toLocaleString("en-US", { 
+              month: "short", 
+              day: "numeric", 
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true
+            });
+          }
+        } catch (e) {
+          formattedDate = trucker.created_at || "N/A";
+        }
+        
+        return {
+          id: trucker.id.toString(),
+          name: trucker.name,
+          company: trucker.name,
+          tmId: trucker.unique_id || `TMTR${trucker.id}`,
+          location: trucker.state_name || "N/A",
+          date: formattedDate,
+          image: trucker.images ? `${BASE_URL}/public/${trucker.images}` : null
+        };
+      })
+    : [
+        { id: "1", name: "Rajesh Kumar", company: "Kumar Transport", tmId: "TMTR001", location: "Mumbai", date: "20 Nov 2024", image: null },
+        { id: "2", name: "Amit Sharma", company: "Sharma Logistics", tmId: "TMTR002", location: "Bangalore", date: "19 Nov 2024", image: null },
+        { id: "3", name: "Suresh Patel", company: "Patel Freight", tmId: "TMTR003", location: "Kolkata", date: "17 Nov 2024", image: null },
+        { id: "4", name: "Vikram Singh", company: "Singh Express", tmId: "TMTR004", location: "Delhi", date: "14 Nov 2024", image: null },
+        { id: "5", name: "Arjun Mehta", company: "Mehta Transport", tmId: "TMTR005", location: "Ahmedabad", date: "11 Nov 2024", image: null },
+      ];
+
   return (
     <div className="space-y-6">
+      {/* Error Banner */}
+      {apiError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <svg className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-red-800">Unable to load dashboard data</h3>
+            <p className="text-sm text-red-600 mt-1">{apiError}</p>
+            <p className="text-xs text-red-500 mt-2">Showing fallback data. Please check your connection or contact support.</p>
+          </div>
+        </div>
+      )}
+
       {/* Stats Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4" suppressHydrationWarning>
         {stats.map((stat, index) => (
           <StatCard key={stat.title} {...stat} index={index} />
         ))}
       </div>
 
       {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2" suppressHydrationWarning>
         {/* Revenue Chart */}
         <Card>
           <CardHeader>
             <CardTitle>Revenue Trend</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent suppressHydrationWarning>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={revenueData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
@@ -267,7 +421,7 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Top Performing Routes</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent suppressHydrationWarning>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={routeData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
@@ -288,7 +442,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Onboarding Sections */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2" suppressHydrationWarning>
         {/* Recent Shippers */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -313,7 +467,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="p-3">
               <div className="space-y-1">
-                {recentShippers.map((shipper, index) => (
+                {recentShippers.map((shipper: any, index: number) => (
                   <motion.div
                     key={shipper.id}
                     initial={{ opacity: 0, x: -10 }}
@@ -323,14 +477,19 @@ export default function DashboardPage() {
                     className="flex items-center justify-between group p-3 rounded-xl transition-all"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="h-11 w-11 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:border-blue-200 group-hover:text-blue-600 group-hover:shadow-sm transition-all">
-                        <UserIcon className="h-5 w-5" />
+                      <div className="h-11 w-11 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:border-blue-200 group-hover:text-blue-600 group-hover:shadow-sm transition-all overflow-hidden">
+                        {shipper.image ? (
+                          <img src={shipper.image} alt={shipper.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <UserIcon className="h-5 w-5" />
+                        )}
                       </div>
                       <div>
-                        <p className="text-[15px] font-bold text-gray-800 leading-tight group-hover:text-blue-600 transition-colors">
+                        <p className="text-[15px] font-bold text-gray-800 leading-tight group-hover:text-blue-600 transition-colors" suppressHydrationWarning>
                           {shipper.name}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <p className="text-[10px] text-gray-400 font-medium mb-1" suppressHydrationWarning>{shipper.tmId}</p>
+                        <div className="flex items-center gap-2" suppressHydrationWarning>
                           <span className="text-[11px] text-gray-500 flex items-center gap-1">
                             <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                             {shipper.location}
@@ -340,12 +499,12 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </div>
-                    <Link
-                      href={`/shippers/${shipper.id}`}
+                    <button
+                      onClick={() => handleShipperClick(shipper.id)}
                       className="h-9 w-9 flex items-center justify-center rounded-xl bg-gray-50 group-hover:bg-blue-600 text-gray-400 group-hover:text-white group-hover:shadow-lg group-hover:shadow-blue-200 transition-all"
                     >
                       <EyeIcon className="h-4 w-4" />
-                    </Link>
+                    </button>
                   </motion.div>
                 ))}
               </div>
@@ -377,7 +536,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="p-3">
               <div className="space-y-1">
-                {recentTruckers.map((trucker, index) => (
+                {recentTruckers.map((trucker: any, index: number) => (
                   <motion.div
                     key={trucker.id}
                     initial={{ opacity: 0, x: 10 }}
@@ -387,14 +546,19 @@ export default function DashboardPage() {
                     className="flex items-center justify-between group p-3 rounded-xl transition-all"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="h-11 w-11 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:border-emerald-200 group-hover:text-emerald-600 group-hover:shadow-sm transition-all">
-                        <TruckIcon className="h-5 w-5" />
+                      <div className="h-11 w-11 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:border-emerald-200 group-hover:text-emerald-600 group-hover:shadow-sm transition-all overflow-hidden">
+                        {trucker.image ? (
+                          <img src={trucker.image} alt={trucker.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <TruckIcon className="h-5 w-5" />
+                        )}
                       </div>
                       <div>
-                        <p className="text-[15px] font-bold text-gray-800 leading-tight group-hover:text-emerald-600 transition-colors">
+                        <p className="text-[15px] font-bold text-gray-800 leading-tight group-hover:text-emerald-600 transition-colors" suppressHydrationWarning>
                           {trucker.name}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <p className="text-[10px] text-gray-400 font-medium mb-1" suppressHydrationWarning>{trucker.tmId}</p>
+                        <div className="flex items-center gap-2" suppressHydrationWarning>
                           <span className="text-[11px] text-gray-500 flex items-center gap-1">
                             <TruckIcon className="h-2.5 w-2.5" />
                             {trucker.location}
@@ -404,12 +568,12 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </div>
-                    <Link
-                      href={`/truckers/${trucker.id}`}
+                    <button
+                      onClick={() => handleTruckerClick(trucker.id)}
                       className="h-9 w-9 flex items-center justify-center rounded-xl bg-gray-50 group-hover:bg-emerald-600 text-gray-400 group-hover:text-white group-hover:shadow-lg group-hover:shadow-emerald-200 transition-all"
                     >
                       <EyeIcon className="h-4 w-4" />
-                    </Link>
+                    </button>
                   </motion.div>
                 ))}
               </div>
@@ -423,34 +587,56 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle>Recent Load Activities</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent suppressHydrationWarning>
           <div className="space-y-4">
-            {mockLoads.slice(0, 5).map((load) => (
-              <div
-                key={load.id}
-                className="flex items-center justify-between border-b border-gray-100 pb-4 last:border-0 last:pb-0"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <p className="font-medium text-gray-700">{load.loadNumber}</p>
-                    <Badge variant={load.status}>{load.status}</Badge>
+            {(dashboardData?.recent_post_loads || mockLoads.slice(0, 5)).slice(0, 5).map((load: any) => {
+              // Parse locations
+              const parseLocation = (loc: string) => {
+                if (!loc) return { city: "N/A", state: "N/A" };
+                const parts = loc.split(",").map(p => p.trim());
+                return {
+                  city: parts[0] || "N/A",
+                  state: parts[parts.length - 2] || "N/A"
+                };
+              };
+
+              const origin = load.origin_location ? parseLocation(load.origin_location) : { city: load.origin?.city || "N/A", state: load.origin?.state || "N/A" };
+              const destination = load.destination_location ? parseLocation(load.destination_location) : { city: load.destination?.city || "N/A", state: load.destination?.state || "N/A" };
+              
+              // Map status
+              const getStatusVariant = (status: string) => {
+                if (status === "open-load") return "pending";
+                if (status === "in-transit") return "in-transit";
+                if (status === "delivered") return "delivered";
+                return "default";
+              };
+
+              return (
+                <div
+                  key={load.id}
+                  className="flex items-center justify-between border-b border-gray-100 pb-4 last:border-0 last:pb-0"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <p className="font-medium text-gray-700">{load.load_id || load.loadNumber}</p>
+                      <Badge variant={getStatusVariant(load.status)}>{load.status}</Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {origin.city}, {origin.state} → {destination.city}, {destination.state}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Pickup: {load.picup_date || load.pickup_date || formatDate(load.pickupDate)}
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-gray-600">
-                    {load.origin.city}, {load.origin.state} → {load.destination.city},{" "}
-                    {load.destination.state}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Pickup: {formatDate(load.pickupDate)}
-                  </p>
+                  <div className="text-right">
+                    <p className="font-semibold text-gray-700">
+                      {load.shipper_price ? `₹${parseFloat(load.shipper_price).toLocaleString('en-IN')}` : formatCurrency(load.revenue)}
+                    </p>
+                    <p className="text-sm text-gray-600">{load.company_name || load.shipperName}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-semibold text-gray-700">
-                    {formatCurrency(load.revenue)}
-                  </p>
-                  <p className="text-sm text-gray-600">{load.shipperName}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

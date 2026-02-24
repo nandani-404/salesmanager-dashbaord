@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import apiClient from "@/lib/api/client";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 interface VehicleDetail {
   id: number;
@@ -79,6 +81,8 @@ export default function VehicleDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchVehicleDetail = async () => {
@@ -143,9 +147,358 @@ export default function VehicleDetailPage({
     { id: "documents", label: "Documents", icon: FileText },
   ];
 
-  const handleDownloadPDF = () => {
-    // PDF download functionality will be implemented here
-    alert("PDF download functionality will be implemented");
+  const handleDownloadPDF = async () => {
+    if (!contentRef.current || !vehicle) return;
+
+    try {
+      setIsGeneratingPDF(true);
+
+      // Store current tab and temporarily show all content
+      const currentTab = activeTab;
+      
+      // Create a temporary container with all tabs content
+      const tempContainer = document.createElement("div");
+      tempContainer.style.position = "absolute";
+      tempContainer.style.left = "-9999px";
+      tempContainer.style.width = "1200px";
+      tempContainer.style.background = "white";
+      tempContainer.style.padding = "40px";
+      document.body.appendChild(tempContainer);
+
+      // Build complete content for PDF with proper text wrapping
+      const tableStyle = "width: 100%; border-collapse: collapse; table-layout: fixed;";
+      const cellLabelStyle = "padding: 10px 8px; color: #6b7280; width: 40%; vertical-align: top; font-size: 13px; line-height: 1.4;";
+      const cellValueStyle = "padding: 10px 8px; font-weight: 600; width: 60%; white-space: normal; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; font-size: 13px; line-height: 1.4;";
+      const rowStyle = "border-bottom: 1px solid #e5e7eb;";
+      const headerStyle = "font-size: 18px; color: #1f2937; margin-bottom: 12px; padding-bottom: 6px;";
+      
+      tempContainer.innerHTML = `
+        <div style="font-family: Arial, sans-serif;">
+          <div style="text-align: center; margin-bottom: 25px; padding: 25px; background: linear-gradient(to right, #2563eb, #4f46e5); color: white; border-radius: 12px;">
+            <h1 style="font-size: 28px; margin: 0 0 8px 0;">Vehicle Details Report</h1>
+            <p style="font-size: 18px; margin: 0;">${vehicle.registration_number}</p>
+            <p style="font-size: 14px; margin: 8px 0 0 0; opacity: 0.9;">${vehicle.vehicle_id}</p>
+          </div>
+
+          <div style="margin-bottom: 25px;">
+            <h2 style="${headerStyle} border-bottom: 2px solid #2563eb;">Vehicle Information</h2>
+            <table style="${tableStyle}">
+              <colgroup>
+                <col style="width: 40%;">
+                <col style="width: 60%;">
+              </colgroup>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Manufacturer</td>
+                <td style="${cellValueStyle}">${vehicle.manufacturer || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Model</td>
+                <td style="${cellValueStyle}">${vehicle.model || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Fuel Type</td>
+                <td style="${cellValueStyle}">${vehicle.fuel_type || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Color</td>
+                <td style="${cellValueStyle}">${vehicle.color || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Vehicle Body</td>
+                <td style="${cellValueStyle}">${vehicle.vehicle_body || "N/A"}</td>
+              </tr>
+              <tr>
+                <td style="${cellLabelStyle}">Vehicle Type</td>
+                <td style="${cellValueStyle}">${vehicle.vehicle_type || "N/A"}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin-bottom: 25px;">
+            <h2 style="${headerStyle} border-bottom: 2px solid #4f46e5;">Owner Information</h2>
+            <table style="${tableStyle}">
+              <colgroup>
+                <col style="width: 40%;">
+                <col style="width: 60%;">
+              </colgroup>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Owner Name</td>
+                <td style="${cellValueStyle}">${vehicle.owner_name || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Father / Care Of</td>
+                <td style="${cellValueStyle}">${vehicle.father_name || "N/A"}</td>
+              </tr>
+              <tr>
+                <td style="${cellLabelStyle}">Permanent Address</td>
+                <td style="${cellValueStyle}">${vehicle.permanent_address || "N/A"}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin-bottom: 25px;">
+            <h2 style="${headerStyle} border-bottom: 2px solid #ef4444;">Location</h2>
+            <table style="${tableStyle}">
+              <colgroup>
+                <col style="width: 40%;">
+                <col style="width: 60%;">
+              </colgroup>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">State</td>
+                <td style="${cellValueStyle}">${vehicle.vehicle_location_state || "N/A"}</td>
+              </tr>
+              <tr>
+                <td style="${cellLabelStyle}">District</td>
+                <td style="${cellValueStyle}">${vehicle.vehicle_location_district || "N/A"}</td>
+              </tr>
+            </table
+          </div>
+
+          <div style="margin-bottom: 25px;">
+            <h2 style="${headerStyle} border-bottom: 2px solid #2563eb;">Technical Specifications</h2>
+            <table style="${tableStyle}">
+              <colgroup>
+                <col style="width: 40%;">
+                <col style="width: 60%;">
+              </colgroup>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Engine Number</td>
+                <td style="${cellValueStyle}">${vehicle.engine_number || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Chassis Number</td>
+                <td style="${cellValueStyle}">${vehicle.chassis_number || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Cubic Capacity</td>
+                <td style="${cellValueStyle}">${vehicle.cubic_capacity || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Gross Vehicle Weight</td>
+                <td style="${cellValueStyle}">${vehicle.gross_vehicle_weight ? `${vehicle.gross_vehicle_weight} kg` : "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Unladen Weight</td>
+                <td style="${cellValueStyle}">${vehicle.unladen_weight ? `${vehicle.unladen_weight} kg` : "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Seating Capacity</td>
+                <td style="${cellValueStyle}">${vehicle.seating_capacity || "N/A"}</td>
+              </tr>
+              <tr>
+                <td style="${cellLabelStyle}">Standing Capacity</td>
+                <td style="${cellValueStyle}">${vehicle.standing_capacity || "N/A"}</td>
+              </tr
+            </table>
+          </div>
+
+          <div style="margin-bottom: 25px;">
+            <h2 style="${headerStyle} border-bottom: 2px solid #2563eb;">Registration Details</h2>
+            <table style="${tableStyle}">
+              <colgroup>
+                <col style="width: 40%;">
+                <col style="width: 60%;">
+              </colgroup>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Registration Date</td>
+                <td style="${cellValueStyle}">${vehicle.registration_date ? new Date(vehicle.registration_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Vehicle Category</td>
+                <td style="${cellValueStyle}">${vehicle.vehicle_category || "N/A"}</td>
+              </tr
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Vehicle Class</td>
+                <td style="${cellValueStyle}">${vehicle.vehicle_class || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">RTO Name</td>
+                <td style="${cellValueStyle}">${vehicle.rto_name || "N/A"}</td>
+              </tr>
+              <tr>
+                <td style="${cellLabelStyle}">Registration Valid Upto</td>
+                <td style="${cellValueStyle}">${vehicle.registration_valid_upto ? new Date(vehicle.registration_valid_upto).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A"}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin-bottom: 25px;">
+            <h2 style="${headerStyle} border-bottom: 2px solid #10b981;">Insurance & Validity</h2>
+            <table style="${tableStyle}">
+              <colgroup>
+                <col style="width: 40%;">
+                <col style="width: 60%;">
+              </colgroup>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Insurance Company</td>
+                <td style="${cellValueStyle}">${vehicle.insurance_company || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Policy Number</td>
+                <td style="${cellValueStyle}">${vehicle.insurance_policy_number || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Insurance Validity</td>
+                <td style="${cellValueStyle}">${vehicle.insurance_validity ? new Date(vehicle.insurance_validity).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A"}</td>
+              </tr
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Fitness Valid Upto</td>
+                <td style="${cellValueStyle}">${vehicle.fitness_valid_upto ? new Date(vehicle.fitness_valid_upto).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">PUC Valid Upto</td>
+                <td style="${cellValueStyle}">${vehicle.pollution_valid_upto ? new Date(vehicle.pollution_valid_upto).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A"}</td>
+              </tr>
+              <tr>
+                <td style="${cellLabelStyle}">Road Tax Paid Upto</td>
+                <td style="${cellValueStyle}">${vehicle.road_tax_paid_upto ? new Date(vehicle.road_tax_paid_upto).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A"}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin-bottom: 25px;">
+            <h2 style="${headerStyle} border-bottom: 2px solid #2563eb;">Permit Information</h2>
+            <table style="${tableStyle}">
+              <colgroup>
+                <col style="width: 40%;">
+                <col style="width: 60%;">
+              </colgroup>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">National Permit Number</td>
+                <td style="${cellValueStyle}">${vehicle.national_permit_number || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">National Permit Validity</td>
+                <td style="${cellValueStyle}">${vehicle.national_permit_validity ? new Date(vehicle.national_permit_validity).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">State Permit Number</td>
+                <td style="${cellValueStyle}">${vehicle.state_permit_number || "N/A"}</td>
+              </tr>
+              <tr>
+                <td style="${cellLabelStyle}">State Permit Validity</td>
+                <td style="${cellValueStyle}">${vehicle.state_permit_validity ? new Date(vehicle.state_permit_validity).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A"}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div>
+            <h2 style="${headerStyle} border-bottom: 2px solid #8b5cf6;">Additional Information</h2>
+            <table style="${tableStyle}">
+              <colgroup>
+                <col style="width: 40%;">
+                <col style="width: 60%;">
+              </colgroup>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Hypothecation</td>
+                <td style="${cellValueStyle}">${vehicle.hypothecation || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">NOC Details</td>
+                <td style="${cellValueStyle}">${vehicle.noc_details || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Smart Card Issued</td>
+                <td style="${cellValueStyle}">${vehicle.smart_card_issued || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Previous Reg Number</td>
+                <td style="${cellValueStyle}">${vehicle.previous_registration_number || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Blacklist Status</td>
+                <td style="${cellValueStyle}">${vehicle.blacklist_status || "N/A"}</td>
+              </tr>
+              <tr style="${rowStyle}">
+                <td style="${cellLabelStyle}">Tax Status</td>
+                <td style="${cellValueStyle}">${vehicle.tax_status || "N/A"}</td>
+              </tr>
+              <tr>
+                <td style="${cellLabelStyle}">RC Status</td>
+                <td style="${cellValueStyle}">${vehicle.rc_status || "N/A"}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin-top: 30px; padding-top: 15px; border-top: 2px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 11px;">
+            <p>Generated on ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+          </div>
+        </div>
+      `;
+
+      // Convert to canvas with optimized settings for smaller file size
+      const canvas = await html2canvas(tempContainer, {
+        scale: 1.5, // Reduced from 2 to lower file size while maintaining quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+        imageTimeout: 0,
+        removeContainer: false,
+      });
+
+      // Remove temporary container
+      document.body.removeChild(tempContainer);
+
+      // Create PDF with compression
+      const imgData = canvas.toDataURL("image/jpeg", 0.85); // Use JPEG with 85% quality instead of PNG
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true, // Enable PDF compression
+      });
+
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Add first page with compression
+      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight, undefined, "FAST");
+      heightLeft -= pageHeight;
+
+      // Add additional pages if needed with compression
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight, undefined, "FAST");
+        heightLeft -= pageHeight;
+      }
+
+      // Save PDF with proper download
+      const fileName = `vehicle-${vehicle.registration_number}-${Date.now()}.pdf`;
+      
+      // Generate blob and create download link - prevent navigation
+      const pdfBlob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      
+      // Create temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      link.style.display = 'none';
+      link.target = '_self';
+      document.body.appendChild(link);
+      
+      // Use setTimeout to ensure proper download
+      setTimeout(() => {
+        link.click();
+        
+        // Cleanup after download
+        setTimeout(() => {
+          if (document.body.contains(link)) {
+            document.body.removeChild(link);
+          }
+          URL.revokeObjectURL(blobUrl);
+        }, 200);
+      }, 0);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      alert("Failed to generate PDF. Please try again.");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
   const InfoRow = ({ label, value }: { label: string; value: string }) => (
@@ -157,7 +510,7 @@ export default function VehicleDetailPage({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+      <div ref={contentRef} className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -180,11 +533,26 @@ export default function VehicleDetailPage({
           </div>
           <div className="flex items-center gap-3">
             <Button
-              onClick={handleDownloadPDF}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDownloadPDF();
+              }}
+              disabled={isGeneratingPDF}
+              className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+              type="button"
             >
-              <Download className="h-4 w-4 mr-2" />
-              Download PDF
+              {isGeneratingPDF ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating PDF...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </>
+              )}
             </Button>
           </div>
         </motion.div>

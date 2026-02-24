@@ -6,48 +6,131 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, User, Mail, Phone, Eye, Package, Building2,
   FileText, Check, X, Truck, Calendar, MapPin, CreditCard,
-  Globe, Star, ShieldCheck
+  Globe, Star, ShieldCheck, Loader2, AlertCircle
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import apiClient from "@/lib/api/client";
+import { API_ENDPOINTS, BASE_URL } from "@/config/page";
+
+interface TruckerDetail {
+  id: string;
+  name: string;
+  email: string | null;
+  mobile: string;
+  address: string | null;
+  unique_id: string;
+  transport_name: string | null;
+  verified_trucker_shipper: string | null;
+  state_id: string | null;
+  state_name: string | null;
+  Fleet_Size: string | null;
+  Year_of_Establishment: string | null;
+  city: string | null;
+  pincode: string | null;
+  PAN_Image: string | null;
+  GST_Certificate: string | null;
+  PAN_Number: string | null;
+  GST_Number: string | null;
+  Registered_ID: string | null;
+  account_holder_name: string | null;
+  account_number: string | null;
+  bank_name: string | null;
+  branch_name: string | null;
+  ifsc_code: string | null;
+  total_vehicles: string;
+  images: string | null;
+}
 
 export default function TruckerProfilePage() {
   const params = useParams();
   const router = useRouter();
   const truckerId = params.id as string;
 
-  // Mock Data
-  const trucker = {
-    id: truckerId,
-    name: "Prince Singh",
-    companyName: "Singh Express Carriers",
-    truckerId: "TM2507KA03136",
-    email: "prince.singh@singhexpress.com",
-    mobile: "+91 98765 43210",
-    alternatePhone: "+91 98765 43211",
+  const [trucker, setTrucker] = useState<TruckerDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [hoveredDoc, setHoveredDoc] = useState<string | null>(null);
+  const [updateStatusLoading, setUpdateStatusLoading] = useState(false);
+  const [updateStatusSuccess, setUpdateStatusSuccess] = useState(false);
+  const [updateStatusError, setUpdateStatusError] = useState<string | null>(null);
 
-    yearsInBusiness: "5-10 years",
-    fleetSize: "10-20 trucks",
-    officeAddress: "Plot No. 45, Transport Nagar",
-    state: "Karnataka",
-    city: "Bangalore",
-    pinCode: "560058",
-    registrationNumber: "KA-2018-SEC-123456",
-    establishedYear: "2015",
-    bankName: "HDFC Bank",
-    accountNumber: "50200012345678",
-    ifscCode: "HDFC0001234",
-    branchName: "Koramangala",
-    pan: "ABCPS1234D",
-    gst: "29ABCPS1234D1Z5",
-    totalVehicles: 15,
-    completedLoads: 342,
-    rating: 4.8,
-    activeLoads: 8,
-    status: "pending_approval", // pending_approval, active, inactive
+  useEffect(() => {
+    const fetchTruckerDetail = async () => {
+      try {
+        setLoading(true);
+        const response = await apiClient.get<{ trucker: TruckerDetail }>(
+          API_ENDPOINTS.dashboard.truckerDetail(truckerId)
+        );
+        setTrucker(response.data.trucker);
+        setError(null);
+      } catch (err: any) {
+        console.error("Failed to fetch trucker details:", err);
+        setError(err.response?.data?.message || err.message || "Failed to load trucker details");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (truckerId) {
+      fetchTruckerDetail();
+    }
+  }, [truckerId]);
+
+  const handleUpdateStatus = async (verified: number) => {
+    if (!trucker) return;
+    
+    setUpdateStatusLoading(true);
+    setUpdateStatusError(null);
+    setUpdateStatusSuccess(false);
+    
+    try {
+      await apiClient.post(
+        API_ENDPOINTS.dashboard.truckerUpdateStatus(trucker.id),
+        { verified_trucker_shipper: verified }
+      );
+      
+      setUpdateStatusSuccess(true);
+      
+      // Update local trucker state
+      setTrucker({
+        ...trucker,
+        verified_trucker_shipper: verified.toString()
+      });
+      
+      // Auto-hide success message after 3 seconds
+      setTimeout(() => setUpdateStatusSuccess(false), 3000);
+    } catch (err: any) {
+      console.error("Failed to update trucker status:", err);
+      setUpdateStatusError(
+        err?.response?.data?.message || err?.message || "Failed to update status"
+      );
+    } finally {
+      setUpdateStatusLoading(false);
+    }
   };
 
-  const [hoveredDoc, setHoveredDoc] = useState<string | null>(null);
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
+        <h3 className="text-lg font-bold text-gray-800">Loading Trucker Details...</h3>
+      </div>
+    );
+  }
+
+  if (error || !trucker) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
+        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+        <p className="text-gray-500">{error || "Trucker not found"}</p>
+        <Button onClick={() => router.back()} className="mt-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Go Back
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -71,38 +154,48 @@ export default function TruckerProfilePage() {
           transition={{ duration: 0.4, delay: 0.1 }}
         >
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-6" suppressHydrationWarning>
               <div className="flex items-start gap-6 mb-6">
                 <motion.div
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
-                  className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg"
+                  className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden"
                 >
-                  <span className="text-3xl font-bold text-white">
-                    {trucker.companyName.substring(0, 2).toUpperCase()}
-                  </span>
+                  {trucker.images ? (
+                    <img 
+                      src={`${BASE_URL}/public/${trucker.images}`} 
+                      alt={trucker.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-3xl font-bold text-white">
+                      {(trucker.transport_name || trucker.name).substring(0, 2).toUpperCase()}
+                    </span>
+                  )}
                 </motion.div>
                 <div className="flex-1">
                   <h1 className="text-2xl font-bold text-gray-700">
-                    {trucker.companyName}
+                    {trucker.transport_name || trucker.name}
                   </h1>
                   <p className="text-sm text-gray-500 mt-1">
-                    {trucker.truckerId}
+                    {trucker.unique_id}
                   </p>
                   <p className="text-gray-600 mt-1 font-medium">
                     {trucker.name}
                   </p>
                   <div className="flex items-center gap-4 mt-2">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-400" />
-                      <a
-                        href={`mailto:${trucker.email}`}
-                        className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                      >
-                        {trucker.email}
-                      </a>
-                    </div>
+                    {trucker.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                        <a
+                          href={`mailto:${trucker.email}`}
+                          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                        >
+                          {trucker.email}
+                        </a>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-gray-400" />
                       <a
@@ -123,35 +216,38 @@ export default function TruckerProfilePage() {
                     Total Vehicles
                   </p>
                   <p className="text-lg font-bold text-blue-700 mt-1">
-                    {trucker.totalVehicles}
+                    {trucker.total_vehicles || "0"}
                   </p>
                 </div>
                 <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 px-4 py-3 rounded-lg">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Active Loads
+                    Fleet Size
                   </p>
                   <p className="text-lg font-bold text-orange-700 mt-1">
-                    {trucker.activeLoads}
+                    {trucker.Fleet_Size || "N/A"}
                   </p>
                 </div>
                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 px-4 py-3 rounded-lg">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Completed Loads
+                    Established
                   </p>
                   <p className="text-lg font-bold text-green-700 mt-1">
-                    {trucker.completedLoads}
+                    {trucker.Year_of_Establishment || "N/A"}
                   </p>
                 </div>
                 <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Rating
+                    Status
                   </p>
                   <div className="flex items-center gap-2 mt-1">
-                    <div className="flex items-center text-amber-500">
-                      <Star className="h-5 w-5 fill-current" />
-                      <span className="text-lg font-bold ml-1 text-gray-800">{trucker.rating}</span>
-                    </div>
-                    <span className="text-xs text-gray-400">/ 5.0</span>
+                    {trucker.verified_trucker_shipper === "1" ? (
+                      <ShieldCheck className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-amber-600" />
+                    )}
+                    <span className="text-lg font-bold text-gray-800">
+                      {trucker.verified_trucker_shipper === "1" ? "Verified" : "Pending"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -223,7 +319,7 @@ export default function TruckerProfilePage() {
                       </label>
                       <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all">
                         <p className="text-sm font-medium text-gray-700">
-                          {trucker.registrationNumber}
+                          {trucker.Registered_ID || "N/A"}
                         </p>
                       </div>
                     </div>
@@ -233,7 +329,7 @@ export default function TruckerProfilePage() {
                       </label>
                       <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all">
                         <p className="text-sm font-mono font-semibold text-blue-600">
-                          {trucker.gst}
+                          {trucker.GST_Number || "N/A"}
                         </p>
                       </div>
                     </div>
@@ -265,7 +361,24 @@ export default function TruckerProfilePage() {
                             <Eye className="h-5 w-5 text-blue-600" />
                           </div>
                         </div>
-                        {hoveredDoc === "gst" && (
+                        {hoveredDoc === "gst" && trucker.GST_Certificate && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                            transition={{ duration: 0.2 }}
+                            className="absolute z-50 mt-2 w-96 bg-white border-2 border-blue-300 rounded-lg shadow-2xl p-4"
+                          >
+                            <div className="h-56 bg-gradient-to-br from-gray-100 to-gray-200 rounded flex items-center justify-center overflow-hidden">
+                              <img 
+                                src={`${BASE_URL}/public/${trucker.GST_Certificate}`}
+                                alt="GST Certificate"
+                                className="w-full h-full object-contain"
+                              />
+                            </div>
+                          </motion.div>
+                        )}
+                        {hoveredDoc === "gst" && !trucker.GST_Certificate && (
                           <motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 10 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -280,7 +393,7 @@ export default function TruckerProfilePage() {
                                   GST Certificate
                                 </p>
                                 <p className="text-sm text-gray-500 mt-1">
-                                  Document Preview
+                                  No document uploaded
                                 </p>
                               </div>
                             </div>
@@ -321,7 +434,7 @@ export default function TruckerProfilePage() {
                       </label>
                       <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-violet-300 hover:shadow-sm transition-all">
                         <p className="text-sm font-mono font-semibold text-violet-600">
-                          {trucker.pan}
+                          {trucker.PAN_Number || "N/A"}
                         </p>
                       </div>
                     </div>
@@ -353,7 +466,24 @@ export default function TruckerProfilePage() {
                             <Eye className="h-5 w-5 text-violet-600" />
                           </div>
                         </div>
-                        {hoveredDoc === "pan" && (
+                        {hoveredDoc === "pan" && trucker.PAN_Image && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                            transition={{ duration: 0.2 }}
+                            className="absolute z-50 mt-2 w-96 bg-white border-2 border-violet-300 rounded-lg shadow-2xl p-4"
+                          >
+                            <div className="h-56 bg-gradient-to-br from-violet-100 to-purple-200 rounded flex items-center justify-center overflow-hidden">
+                              <img 
+                                src={`${BASE_URL}/public/${trucker.PAN_Image}`}
+                                alt="PAN Card"
+                                className="w-full h-full object-contain"
+                              />
+                            </div>
+                          </motion.div>
+                        )}
+                        {hoveredDoc === "pan" && !trucker.PAN_Image && (
                           <motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 10 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -368,7 +498,7 @@ export default function TruckerProfilePage() {
                                   PAN Card
                                 </p>
                                 <p className="text-sm text-gray-500 mt-1">
-                                  Document Preview
+                                  No document uploaded
                                 </p>
                               </div>
                             </div>
@@ -399,7 +529,7 @@ export default function TruckerProfilePage() {
                       </label>
                       <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-orange-300 hover:shadow-sm transition-all">
                         <p className="text-sm font-medium text-gray-700">
-                          {trucker.state}
+                          {trucker.state_name || "N/A"}
                         </p>
                       </div>
                     </div>
@@ -409,7 +539,7 @@ export default function TruckerProfilePage() {
                       </label>
                       <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-orange-300 hover:shadow-sm transition-all">
                         <p className="text-sm font-medium text-gray-700">
-                          {trucker.city}
+                          {trucker.city || "N/A"}
                         </p>
                       </div>
                     </div>
@@ -419,7 +549,7 @@ export default function TruckerProfilePage() {
                       </label>
                       <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-orange-300 hover:shadow-sm transition-all">
                         <p className="text-sm font-medium text-gray-700">
-                          {trucker.officeAddress}
+                          {trucker.address || "N/A"}
                         </p>
                       </div>
                     </div>
@@ -429,7 +559,7 @@ export default function TruckerProfilePage() {
                       </label>
                       <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-orange-300 hover:shadow-sm transition-all">
                         <p className="text-sm font-mono font-semibold text-orange-600">
-                          {trucker.pinCode}
+                          {trucker.pincode || "N/A"}
                         </p>
                       </div>
                     </div>
@@ -463,7 +593,7 @@ export default function TruckerProfilePage() {
                   </label>
                   <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-emerald-300 hover:shadow-sm transition-all">
                     <p className="text-sm font-medium text-gray-700">
-                      {trucker.yearsInBusiness}
+                      {trucker.Year_of_Establishment || "N/A"}
                     </p>
                   </div>
                 </div>
@@ -473,7 +603,7 @@ export default function TruckerProfilePage() {
                   </label>
                   <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-emerald-300 hover:shadow-sm transition-all">
                     <p className="text-sm font-semibold text-emerald-600">
-                      {trucker.fleetSize}
+                      {trucker.Fleet_Size || "N/A"}
                     </p>
                   </div>
                 </div>
@@ -485,7 +615,7 @@ export default function TruckerProfilePage() {
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-emerald-600" />
                       <p className="text-sm font-medium text-gray-700">
-                        Since {trucker.establishedYear}
+                        Since {trucker.Year_of_Establishment || "N/A"}
                       </p>
                     </div>
                   </div>
@@ -518,7 +648,7 @@ export default function TruckerProfilePage() {
                   </label>
                   <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-purple-300 hover:shadow-sm transition-all">
                     <p className="text-sm font-medium text-gray-700">
-                      {trucker.bankName}
+                      {trucker.bank_name || "N/A"}
                     </p>
                   </div>
                 </div>
@@ -528,7 +658,7 @@ export default function TruckerProfilePage() {
                   </label>
                   <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-purple-300 hover:shadow-sm transition-all">
                     <p className="text-sm font-mono font-semibold text-purple-600">
-                      {trucker.accountNumber}
+                      {trucker.account_number || "N/A"}
                     </p>
                   </div>
                 </div>
@@ -538,7 +668,7 @@ export default function TruckerProfilePage() {
                   </label>
                   <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-purple-300 hover:shadow-sm transition-all">
                     <p className="text-sm font-mono font-semibold text-gray-700">
-                      {trucker.ifscCode}
+                      {trucker.ifsc_code || "N/A"}
                     </p>
                   </div>
                 </div>
@@ -548,7 +678,7 @@ export default function TruckerProfilePage() {
                   </label>
                   <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-purple-300 hover:shadow-sm transition-all">
                     <p className="text-sm font-medium text-gray-700">
-                      {trucker.branchName}
+                      {trucker.branch_name || "N/A"}
                     </p>
                   </div>
                 </div>
@@ -613,27 +743,82 @@ export default function TruckerProfilePage() {
                   Account Status
                 </h3>
               </div>
+              
+              {/* Success Message */}
+              {updateStatusSuccess && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl flex items-center gap-3"
+                >
+                  <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                    <Check className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-green-800">Status updated successfully!</p>
+                    <p className="text-xs text-green-600 mt-0.5">Trucker verification status has been saved.</p>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Error Message */}
+              {updateStatusError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-4 p-4 bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 rounded-xl flex items-center gap-3"
+                >
+                  <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-red-800">Failed to update status</p>
+                    <p className="text-xs text-red-600 mt-0.5">{updateStatusError}</p>
+                  </div>
+                </motion.div>
+              )}
+              
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-semibold shadow-sm">
-                    <ClockIcon className="h-4 w-4 mr-2" />
-                    Pending Approval
-                  </span>
+                  {trucker.verified_trucker_shipper === "1" ? (
+                    <span className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-sm font-semibold shadow-sm">
+                      <ShieldCheck className="h-4 w-4 mr-2" />
+                      Verified
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-semibold shadow-sm">
+                      <ClockIcon className="h-4 w-4 mr-2" />
+                      Pending Approval
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-3">
                   <Button
                     size="sm"
-                    className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-md hover:shadow-lg transition-all"
+                    onClick={() => handleUpdateStatus(1)}
+                    disabled={updateStatusLoading || trucker.verified_trucker_shipper === "1"}
+                    className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Check className="mr-1.5 h-4 w-4" />
+                    {updateStatusLoading ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="mr-1.5 h-4 w-4" />
+                    )}
                     Approve
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                    onClick={() => handleUpdateStatus(0)}
+                    disabled={updateStatusLoading || trucker.verified_trucker_shipper === "0"}
+                    className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <X className="mr-1.5 h-4 w-4" />
+                    {updateStatusLoading ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <X className="mr-1.5 h-4 w-4" />
+                    )}
                     Reject
                   </Button>
                 </div>
@@ -660,5 +845,5 @@ function ClockIcon(props: any) {
         clipRule="evenodd"
       />
     </svg>
-  )
+  );
 }

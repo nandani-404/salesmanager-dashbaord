@@ -76,11 +76,11 @@ export default function TruckersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedTrucker, setSelectedTrucker] = useState<TruckerDetail | null>(null);
-  const [fetchingDetail, setFetchingDetail] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
 
   // Fetch Transporters
   useEffect(() => {
@@ -100,34 +100,56 @@ export default function TruckersPage() {
     fetchTransporters();
   }, [currentPage]);
 
+  // Dynamic search with debouncing (using local search only)
+  useEffect(() => {
+    const searchUsers = () => {
+      if (!searchQuery.trim()) {
+        setSearchResults([]);
+        setSearchError(null);
+        return;
+      }
+
+      setIsSearching(true);
+      setSearchError(null);
+
+      // Use local filtering only
+      if (data) {
+        const localResults = data.transporters.filter((t) => {
+          const name = t.name || "";
+          const transportName = t.transport_name || "";
+          const uniqueId = t.unique_id || "";
+          const query = searchQuery.toLowerCase();
+          return name.toLowerCase().includes(query) ||
+                 transportName.toLowerCase().includes(query) ||
+                 uniqueId.toLowerCase().includes(query);
+        });
+        setSearchResults(localResults);
+      }
+      setSearchError(null);
+      setIsSearching(false);
+    };
+
+    // Debounce search
+    const timeoutId = setTimeout(() => {
+      searchUsers();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, data]);
+
   // Filter and search transporters
   const filteredTransporters = useMemo(() => {
     if (!data) return [];
-    return data.transporters.filter((t) => {
-      const name = t.name || "";
-      const transportName = t.transport_name || "";
-      const uniqueId = t.unique_id || "";
-
-      const matchesSearch =
-        name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        transportName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        uniqueId.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesSearch;
-    });
-  }, [searchQuery, data]);
+    
+    // Use search results if searching, otherwise use all transporters
+    const sourceData = searchQuery.trim() ? searchResults : data.transporters;
+    
+    return sourceData;
+  }, [searchQuery, searchResults, data]);
 
   const handleViewProfile = async (id: string) => {
-    try {
-      setFetchingDetail(true);
-      const response = await apiClient.get<{ trucker: TruckerDetail }>(API_ENDPOINTS.dashboard.truckerDetail(id));
-      setSelectedTrucker(response.data.trucker);
-      setShowProfile(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err: any) {
-      console.error("Failed to fetch trucker details:", err);
-    } finally {
-      setFetchingDetail(false);
-    }
+    // Navigate to the trucker detail page
+    router.push(`/truckers/${id}`);
   };
 
   if (loading) {
@@ -151,13 +173,11 @@ export default function TruckersPage() {
 
   return (
     <div className="space-y-6 pb-12 bg-[#F8FAFC] min-h-screen">
-      {!showProfile ? (
-        <>
-          {/* Dashboard Header */}
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold text-[#1e293b]">My Truckers</h1>
-            <p className="text-sm text-gray-500">Manage and view trucker profiles</p>
-          </div>
+      {/* Dashboard Header */}
+      <div className="space-y-1">
+        <h1 className="text-3xl font-bold text-[#1e293b]">My Truckers</h1>
+        <p className="text-sm text-gray-500">Manage and view trucker profiles</p>
+      </div>
 
           {/* Stats Cards (Matched to Image) */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -212,11 +232,14 @@ export default function TruckersPage() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
               <input
                 type="text"
-                placeholder="Search by company name or trucker ID..."
+                placeholder="Search by unique ID, company name, or trucker name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-14 pl-12 pr-4 rounded-xl border border-gray-100 bg-white shadow-sm focus:ring-2 focus:ring-blue-50 outline-none transition-all text-sm placeholder:text-gray-300"
+                className="w-full h-14 pl-12 pr-12 rounded-xl border border-gray-100 bg-white shadow-sm focus:ring-2 focus:ring-blue-50 outline-none transition-all text-sm placeholder:text-gray-300"
               />
+              {isSearching && (
+                <Loader2 className="absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-blue-600 animate-spin" />
+              )}
             </div>
             <div className="flex items-center gap-3">
               <div className="bg-white p-1 rounded-xl border border-gray-100 flex gap-0.5 shadow-sm h-14 items-center px-1">
@@ -276,7 +299,7 @@ export default function TruckersPage() {
                           {t.images ? (
                             <img src={`${IMAGE_URL}${t.images}`} alt="" className="w-full h-full object-cover rounded-lg" />
                           ) : (
-                            (t.transport_name || t.name || "KT").split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                            (t.transport_name || t.name || "KT").split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
                           )}
                         </div>
                         <div className="flex-1 min-w-0 pt-1">
@@ -339,38 +362,62 @@ export default function TruckersPage() {
             ) : (
               <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
                 {filteredTransporters.map((t) => (
-                  <Card key={t.id} className="p-4 border-none shadow-sm flex items-center justify-between gap-4 bg-white rounded-xl hover:shadow-md transition-all cursor-pointer">
-                    <div className="flex items-center gap-4 flex-1" onClick={() => handleViewProfile(t.id)}>
-                      <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold uppercase">
-                        {(t.transport_name || t.name || "?").charAt(0)}
+                  <Card key={t.id} className="p-4 border-none shadow-sm bg-white rounded-xl hover:shadow-md transition-all">
+                    <div className="flex items-center justify-between gap-4">
+                      {/* Left side - Profile info */}
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold uppercase flex-shrink-0">
+                          {(t.name || "?").charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-bold text-gray-900 truncate">{t.name}</h3>
+                          <p className="text-xs text-gray-600 truncate">{t.transport_name || "N/A"}</p>
+                          <p className="text-xs text-gray-500 truncate">{t.unique_id}</p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <h3 className="font-bold text-gray-900 truncate">{t.transport_name || t.name}</h3>
-                        <p className="text-xs text-gray-500 truncate">{t.name}</p>
+
+                      {/* Middle - Stats */}
+                      <div className="flex gap-8 items-center hidden md:flex">
+                        <div className="text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Loads</p>
+                          <p className="font-bold text-gray-900">{t.total_applied}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fleet</p>
+                          <p className="font-bold text-gray-900">{t.total_vehicles}</p>
+                        </div>
+                        <Badge variant={t.verified_trucker_shipper === '1' ? 'confirmed' : 'cancelled'}>
+                          {t.verified_trucker_shipper === '1' ? 'Active' : 'Inactive'}
+                        </Badge>
                       </div>
-                    </div>
-                    <div className="flex gap-12 items-center mr-10 hidden md:flex">
-                      <div className="text-center">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Loads</p>
-                        <p className="font-bold text-gray-900">{t.total_applied}</p>
+
+                      {/* Right side - Action buttons */}
+                      <div className="flex gap-2 flex-shrink-0">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl border-gray-200"
+                          onClick={() => handleViewProfile(t.id)}
+                        >
+                          <Eye className="h-4 w-4 mr-1.5" />
+                          Profile
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
+                          onClick={() => router.push(`/truckers/${t.id}/vehicles`)}
+                        >
+                          <Truck className="h-4 w-4 mr-1.5" />
+                          Trucks
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="rounded-xl bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <Phone className="h-4 w-4 mr-1.5" />
+                          Call
+                        </Button>
                       </div>
-                      <div className="text-center">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fleet</p>
-                        <p className="font-bold text-gray-900">{t.total_vehicles}</p>
-                      </div>
-                      <Badge className={`border-none px-4 py-1 text-[10px] font-bold ${t.verified_trucker_shipper === '1' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-50 text-gray-400'}`}>
-                        {t.verified_trucker_shipper === '1' ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl border-gray-100 h-10 w-10"
-                      >
-                        <Phone className="h-4 w-4" />
-                      </Button>
-                      <span className="text-xs font-mono font-bold text-blue-500 bg-blue-50 px-3 py-2.5 rounded-xl border border-blue-100">{t.unique_id}</span>
                     </div>
                   </Card>
                 ))}
@@ -432,312 +479,7 @@ export default function TruckersPage() {
               </div>
             </div>
           )}
-        </>
-      ) : (
-        /* --- NEW PROFILE UI (MATCHING THE IMAGE) --- */
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="max-w-6xl mx-auto space-y-6">
-          {/* Top Breadcrumb & Back */}
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowProfile(false)}
-              className="h-10 w-10 border-gray-200 bg-white rounded-lg shadow-sm hover:bg-gray-50 flex items-center justify-center"
-            >
-              <ArrowLeft className="h-4 w-4 text-gray-600" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 leading-tight">Profile</h1>
-              <p className="text-[11px] text-gray-400 uppercase tracking-widest font-semibold flex items-center gap-1.5">
-                <LayoutDashboard className="h-3 w-3" /> Dashboard
-              </p>
-            </div>
-          </div>
-
-          {/* Main Identity Card */}
-          <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl">
-            <div className="p-8 pb-10">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-                <div className="flex items-center gap-6">
-                  <div className="h-20 w-20 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg shadow-blue-100 flex-shrink-0">
-                    {(selectedTrucker?.name || "P").charAt(0)}{(selectedTrucker?.name?.split(" ")[1] || "").charAt(0) || "S"}
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{selectedTrucker?.name}</h2>
-                    <p className="text-sm font-medium text-gray-500 mb-2">{selectedTrucker?.transport_name}</p>
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-blue-50 text-blue-600 border-none px-2 py-0.5 text-[10px] font-mono font-bold tracking-tight">
-                        TM ID: {selectedTrucker?.unique_id}
-                      </Badge>
-                      {selectedTrucker?.verified_trucker_shipper === "1" && (
-                        <Badge className="bg-emerald-50 text-emerald-600 border-none px-2 py-0.5 text-[10px] font-bold flex items-center gap-1">
-                          <Check className="h-2.5 w-2.5" /> Verified
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="min-w-[130px] p-4 bg-blue-50/50 rounded-2xl border border-blue-100/30">
-                    <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                      <Truck className="h-3 w-3" /> Total Vehicles
-                    </p>
-                    <p className="text-2xl font-black text-blue-900 leading-none">{selectedTrucker?.total_vehicles || 0}</p>
-                  </div>
-                  <div className="min-w-[130px] p-4 bg-orange-50/50 rounded-2xl border border-orange-100/30">
-                    <p className="text-[10px] font-bold text-orange-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                      <Activity className="h-3 w-3" /> Active Loads
-                    </p>
-                    <p className="text-2xl font-black text-orange-900 leading-none">8</p>
-                  </div>
-                  <div className="min-w-[130px] p-4 bg-purple-50/50 rounded-2xl border border-purple-100/30">
-                    <p className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                      <MapPin className="h-3 w-3" /> Location
-                    </p>
-                    <p className="text-sm font-bold text-purple-900 leading-tight truncate max-w-[100px]">{selectedTrucker?.city || "N/A"}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Toolbar */}
-              <div className="flex items-center gap-3 mt-8 pt-8 border-t border-gray-50 overflow-x-auto whitespace-nowrap">
-                <Button variant="outline" className="h-10 rounded-xl px-5 border-gray-200 text-xs font-bold text-gray-600">
-                  <Mail className="h-3.5 w-3.5 mr-2" /> Send Email
-                </Button>
-                <Button variant="outline" className="h-10 rounded-xl px-5 border-gray-200 text-xs font-bold text-gray-600">
-                  <Phone className="h-3.5 w-3.5 mr-2" /> Call
-                </Button>
-                <Button
-                  className="h-10 rounded-xl px-5 bg-blue-600 hover:bg-blue-700 text-xs font-bold shadow-lg shadow-blue-50"
-                  onClick={() => router.push(`/truckers/${selectedTrucker?.id}/vehicles`)}
-                >
-                  View Trucks
-                </Button>
-              </div>
-            </div>
-          </Card>
-
-          {/* Section: Basic Details */}
-          <Card className="border-none shadow-sm bg-white rounded-2xl">
-            <div className="p-8">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-100">
-                  <User className="h-5 w-5" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">Basic Details</h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Name <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.name}</div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Company Name <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.transport_name}</div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Email <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.email || "prince.singh@singhexpress.com"}</div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Mobile No <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">+91 {selectedTrucker?.mobile}</div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Alternate Phone</label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">+91 {selectedTrucker?.mobile}</div>
-                </div>
-
-              </div>
-            </div>
-          </Card>
-
-          {/* Section: Business Details */}
-          <Card className="border-none shadow-sm bg-white rounded-2xl">
-            <div className="p-8">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="h-9 w-9 rounded-full bg-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-50">
-                  <Briefcase className="h-4 w-4" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">Business Details</h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Yrs in Business <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.Year_of_Establishment || "5-10 years"}</div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Fleet Size <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.Fleet_Size || "10-20 trucks"}</div>
-                </div>
-                <div className="md:col-span-2 space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Office Address <span className="text-red-500">*</span></label>
-                  <div className="h-16 w-full p-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-start font-medium text-gray-700 leading-relaxed">{selectedTrucker?.address || "Plot No. 45, Transport Nagar, Industrial Area Phase 2"}</div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">State <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.state_name}</div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">City <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.city}</div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">PIN Code <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-purple-50 flex items-center justify-between">
-                    <span className="font-bold text-purple-700 ml-4">{selectedTrucker?.pincode}</span>
-                    <Badge className="bg-purple-600 text-white border-none py-0.5 px-1.5 text-[9px] font-black mr-2">PIN</Badge>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Registration Number <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700 uppercase tracking-widest">{selectedTrucker?.Registered_ID || "KA-2018-SEC-123456"}</div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Established Year <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">2015</div>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Section: Bank Details */}
-          <Card className="border-none shadow-sm bg-white rounded-2xl">
-            <div className="p-8">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="h-9 w-9 rounded-full bg-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal-50">
-                  <Landmark className="h-4 w-4" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">Bank Details</h3>
-              </div>
-
-              <div className="space-y-6">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Bank Name <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.bank_name || "HDFC Bank"}</div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Account Number <span className="text-red-500">*</span></label>
-                    <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-mono font-bold text-gray-700 tracking-wider">{selectedTrucker?.account_number}</div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Re-Enter Account Number <span className="text-red-500">*</span></label>
-                    <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-mono font-bold text-gray-700 tracking-wider">{selectedTrucker?.account_number}</div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">IFSC Code <span className="text-red-500">*</span></label>
-                    <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-mono font-bold text-blue-600 uppercase">{selectedTrucker?.ifsc_code}</div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Account Holder Name <span className="text-red-500">*</span></label>
-                    <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.account_holder_name}</div>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Branch Name <span className="text-red-500">*</span></label>
-                  <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-white shadow-sm flex items-center font-medium text-gray-700">{selectedTrucker?.branch_name || "Bangalore - Koramangala"}</div>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Section: KYC Details */}
-          <Card className="border-none shadow-sm bg-white rounded-2xl">
-            <div className="p-8">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="h-9 w-9 rounded-full bg-orange-600 flex items-center justify-center text-white shadow-lg shadow-orange-100">
-                  <FileText className="h-4 w-4" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">KYC Details</h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                {/* PAN Column */}
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">PAN <span className="text-red-500">*</span></label>
-                    <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-orange-50/10 flex items-center justify-between shadow-sm">
-                      <span className="font-mono font-black text-slate-700 uppercase tracking-widest">{selectedTrucker?.PAN_Number}</span>
-                      <Badge className="bg-orange-500 text-white border-none py-0.5 px-1.5 text-[9px] font-black">PAN</Badge>
-                    </div>
-                  </div>
-
-                  {selectedTrucker?.PAN_Image && (
-                    <div className="relative group">
-                      <Button
-                        variant="outline"
-                        className="w-full h-11 rounded-xl border-orange-100 text-orange-600 hover:bg-orange-600 hover:text-white transition-all text-xs font-bold"
-                        onClick={() => window.open(`${IMAGE_URL}${selectedTrucker.PAN_Image}`, '_blank')}
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-2" />
-                        View Full PAN
-                      </Button>
-
-                      {/* Hover Preview Box */}
-                      <div className="absolute bottom-full left-0 mb-3 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-50 scale-95 group-hover:scale-100">
-                        <Card className="p-1 shadow-2xl border-orange-200 overflow-hidden bg-white min-w-[200px]">
-                          <div className="p-2 bg-orange-50/50 border-b border-orange-100 text-[10px] font-bold text-orange-600 flex items-center gap-1.5">
-                            <FileText className="h-3 w-3" /> Documents Preview
-                          </div>
-                          <img
-                            src={`${IMAGE_URL}${selectedTrucker.PAN_Image}`}
-                            alt="PAN Preview"
-                            className="w-full h-auto max-h-48 rounded-lg object-contain p-1"
-                          />
-                        </Card>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* GST Column */}
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">GST <span className="text-red-500">*</span></label>
-                    <div className="h-11 w-full px-4 rounded-lg border border-gray-200 bg-blue-50/10 flex items-center justify-between shadow-sm">
-                      <span className="font-mono font-black text-blue-700 uppercase tracking-widest">{selectedTrucker?.GST_Number}</span>
-                      <Badge className="bg-blue-500 text-white border-none py-0.5 px-1.5 text-[9px] font-black">GST</Badge>
-                    </div>
-                  </div>
-
-                  {selectedTrucker?.GST_Certificate && (
-                    <div className="relative group">
-                      <Button
-                        variant="outline"
-                        className="w-full h-11 rounded-xl border-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white transition-all text-xs font-bold"
-                        onClick={() => window.open(`${IMAGE_URL}${selectedTrucker.GST_Certificate}`, '_blank')}
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-2" />
-                        View Full GST
-                      </Button>
-
-                      {/* Hover Preview Box */}
-                      <div className="absolute bottom-full left-0 mb-3 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-50 scale-95 group-hover:scale-100">
-                        <Card className="p-1 shadow-2xl border-blue-200 overflow-hidden bg-white min-w-[200px]">
-                          <div className="p-2 bg-blue-50/50 border-b border-blue-100 text-[10px] font-bold text-blue-600 flex items-center gap-1.5">
-                            <FileText className="h-3 w-3" /> Documents Preview
-                          </div>
-                          <img
-                            src={`${IMAGE_URL}${selectedTrucker.GST_Certificate}`}
-                            alt="GST Preview"
-                            className="w-full h-auto max-h-48 rounded-lg object-contain p-1"
-                          />
-                        </Card>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
-
-
-        </motion.div>
-      )}
     </div>
+
   );
 }

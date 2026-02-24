@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { mockLoads } from "@/lib/mock-data";
 import { mockTruckerBids } from "@/lib/mock-trucker-bids";
 import { formatCurrency, formatDateTime, formatDate } from "@/lib/utils";
-import { API_ENDPOINTS } from "@/config/page";
+import { API_ENDPOINTS, BASE_URL } from "@/config/page";
 import apiClient from "@/lib/api/client";
 import { Shipper } from "@/lib/types";
 import {
@@ -37,6 +37,10 @@ import {
   FileCheck,
   DollarSign,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -49,6 +53,7 @@ interface ApiShipper {
   mobile: string;
   unique_id: string;
   profile_image: string | null;
+  images: string | null;
   company_name: string | null;
   company_registration_type: string | null;
   years_in_business: string | null;
@@ -122,16 +127,22 @@ interface UpdateStatusPayload {
 
 export default function ShippersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [shippers, setShippers] = useState<Shipper[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedShipper, setSelectedShipper] = useState<Shipper | null>(null);
   const [selectedLoad, setSelectedLoad] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Shipper[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [hoveredDoc, setHoveredDoc] = useState<string | null>(null);
-  const [displayMode, setDisplayMode] = useState<"grid" | "list">("grid");
+  const [displayMode, setDisplayMode] = useState<"grid" | "list">("list");
   const [showFilters, setShowFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
 
   const [counterDialogOpen, setCounterDialogOpen] = useState<string | null>(null);
   const [counterAmount, setCounterAmount] = useState("");
@@ -178,6 +189,7 @@ export default function ShippersPage() {
           contactPerson: s.name || "Unknown Contact",
           email: s.email || "",
           phone: s.mobile || "",
+          profileImage: s.images ? `${BASE_URL}/public/${s.images}` : null,
           address: {
             address: s.address || "",
             city: "",
@@ -237,20 +249,78 @@ export default function ShippersPage() {
     fetchShippers();
   }, []);
 
-  const filteredShippers = shippers.filter(
-    (shipper) => {
-      const name = shipper.companyName || "";
-      const email = shipper.email || "";
-      const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        email.toLowerCase().includes(searchQuery.toLowerCase());
+  // Check for profile query parameter and auto-open profile
+  useEffect(() => {
+    const profileId = searchParams.get('profile');
+    console.log('Profile ID from URL:', profileId);
+    console.log('Shippers loaded:', shippers.length);
+    if (profileId && shippers.length > 0) {
+      const shipper = shippers.find(s => s.id === profileId);
+      console.log('Found shipper:', shipper);
+      if (shipper) {
+        console.log('Opening profile for shipper:', shipper.companyName);
+        handleViewProfile(shipper);
+      }
+    }
+  }, [searchParams, shippers]);
 
+  // Dynamic search with debouncing (using local search only)
+  useEffect(() => {
+    const searchUsers = () => {
+      if (!searchQuery.trim()) {
+        setSearchResults([]);
+        setSearchError(null);
+        return;
+      }
+
+      setIsSearching(true);
+      setSearchError(null);
+
+      // Use local filtering only
+      const localResults = shippers.filter((shipper) => {
+        const name = shipper.companyName || "";
+        const email = shipper.email || "";
+        const uniqueId = shipper.shipperId || "";
+        const contactPerson = shipper.contactPerson || "";
+        const query = searchQuery.toLowerCase();
+        return name.toLowerCase().includes(query) ||
+               email.toLowerCase().includes(query) ||
+               uniqueId.toLowerCase().includes(query) ||
+               contactPerson.toLowerCase().includes(query);
+      });
+      setSearchResults(localResults);
+      setSearchError(null);
+      setIsSearching(false);
+    };
+
+    // Debounce search
+    const timeoutId = setTimeout(() => {
+      searchUsers();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, shippers]);
+
+  const filteredShippers = (searchQuery.trim() ? searchResults : shippers).filter(
+    (shipper) => {
       const matchesFilter = filterStatus === "all" ||
         (filterStatus === "active" && shipper.status.toLowerCase() === "active") ||
         (filterStatus === "inactive" && shipper.status.toLowerCase() !== "active");
 
-      return matchesSearch && matchesFilter;
+      return matchesFilter;
     }
   );
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredShippers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedShippers = filteredShippers.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus]);
 
   const shipperLoads = selectedShipper
     ? mockLoads.filter((load) => load.shipperId === selectedShipper.id)
@@ -301,6 +371,7 @@ export default function ShippersPage() {
           contactPerson: fullData.name,
           email: fullData.email || "",
           phone: fullData.mobile,
+          profileImage: fullData.images ? `${BASE_URL}/public/${fullData.images}` : null,
           address: {
             address: fullData.address || "",
             city: "",
@@ -378,14 +449,27 @@ export default function ShippersPage() {
     setShipperLoadsError(null);
     setShipperApiLoads([]);
     try {
-      const response = await apiClient.get<any>(API_ENDPOINTS.dashboard.shipperLoads(shipper.id));
-      const data = response.data;
-      if (data.shipper && data.shipper.loads) {
-        setShipperApiLoads(data.shipper.loads);
-      } else if (Array.isArray(data.loads)) {
-        setShipperApiLoads(data.loads);
-      } else {
-        setShipperApiLoads([]);
+      // Try shipper-specific endpoint first
+      try {
+        const response = await apiClient.get<any>(API_ENDPOINTS.dashboard.shipperLoads(shipper.id));
+        const data = response.data;
+        if (data.shipper && data.shipper.loads) {
+          setShipperApiLoads(data.shipper.loads);
+        } else if (Array.isArray(data.loads)) {
+          setShipperApiLoads(data.loads);
+        } else {
+          setShipperApiLoads([]);
+        }
+      } catch (specificErr: any) {
+        // If shipper-specific endpoint fails, fall back to general loads endpoint and filter
+        console.log("Shipper-specific endpoint failed, using general loads endpoint");
+        const response = await apiClient.get<any>(API_ENDPOINTS.dashboard.shipmentsLoads);
+        const allLoads = response.data?.loads || [];
+        // Filter loads by shipper ID (user_id matches shipper.id)
+        const shipperLoads = allLoads.filter((load: any) => 
+          load.user_id?.toString() === shipper.id?.toString()
+        );
+        setShipperApiLoads(shipperLoads);
       }
     } catch (err: any) {
       console.error("Failed to fetch shipper loads:", err);
@@ -426,8 +510,8 @@ export default function ShippersPage() {
   };
 
   const handleViewBids = (load: any) => {
-    setSelectedLoad(load);
-    setViewMode("bids");
+    // Navigate to the bids page for this load
+    router.push(`/shipment/${load.id}/bids`);
   };
 
   const handleBackToGrid = () => {
@@ -555,11 +639,14 @@ export default function ShippersPage() {
               <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search shippers by name or email..."
+                placeholder="Search shippers by unique ID, name, or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-12 w-full rounded-xl border border-gray-200 bg-white pl-12 pr-4 text-gray-700 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
+                className="h-12 w-full rounded-xl border border-gray-200 bg-white pl-12 pr-12 text-gray-700 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
               />
+              {isSearching && (
+                <Loader2 className="absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-indigo-600 animate-spin" />
+              )}
             </div>
             <div className="flex gap-2 bg-white rounded-xl border border-gray-200 p-1 shadow-sm">
               <button
@@ -657,7 +744,7 @@ export default function ShippersPage() {
                 : "flex flex-col gap-4"
             }
           >
-            {filteredShippers.map((shipper, index) => (
+            {paginatedShippers.map((shipper, index) => (
               <motion.div
                 key={shipper.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -666,13 +753,13 @@ export default function ShippersPage() {
               >
                 {displayMode === "grid" ? (
                   <Card className="group hover:shadow-xl transition-all duration-300 border border-gray-100 bg-white rounded-2xl overflow-hidden">
-                    <CardContent className="p-0">
+                    <CardContent className="p-0" suppressHydrationWarning>
                       {/* Header with subtle gradient background */}
                       <div className="bg-gradient-to-br from-slate-50 to-gray-50 p-6 border-b border-gray-100">
                         <div className="flex items-start gap-4 mb-4">
                           <motion.button
                             layoutId={`profile-icon-${shipper.id}`}
-                            onClick={() => handleViewProfile(shipper)}
+                            onClick={() => router.push(`/shippers/${shipper.id}`)}
                             className="h-14 w-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer shadow-md"
                           >
                             <User className="h-7 w-7 text-white" />
@@ -684,6 +771,16 @@ export default function ShippersPage() {
                             <p className="text-xs text-gray-500 font-medium">
                               {shipper.shipperId}
                             </p>
+                            <Badge 
+                              variant={
+                                shipper.status.toLowerCase() === "active" ? "confirmed" : 
+                                shipper.status.toLowerCase() === "pending" ? "pending" : 
+                                "cancelled"
+                              }
+                              className="mt-2"
+                            >
+                              {shipper.status}
+                            </Badge>
                           </div>
                         </div>
 
@@ -753,12 +850,12 @@ export default function ShippersPage() {
                   </Card>
                 ) : (
                   <Card className="group hover:shadow-lg transition-all duration-300 border border-gray-100 bg-white rounded-xl overflow-hidden">
-                    <CardContent className="p-5">
+                    <CardContent className="p-5" suppressHydrationWarning>
                       <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4 lg:gap-6">
                         {/* Profile Icon */}
                         <motion.button
                           layoutId={`profile-icon-${shipper.id}`}
-                          onClick={() => handleViewProfile(shipper)}
+                          onClick={() => router.push(`/shippers/${shipper.id}`)}
                           className="h-14 w-14 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0 cursor-pointer transition-all"
                         >
                           <User className="h-6 w-6 text-slate-600" />
@@ -769,9 +866,18 @@ export default function ShippersPage() {
                           <h3 className="font-bold text-gray-700 text-base mb-1">
                             {shipper.companyName}
                           </h3>
-                          <p className="text-xs text-gray-500 font-medium">
+                          <p className="text-xs text-gray-500 font-medium mb-2">
                             {shipper.shipperId}
                           </p>
+                          <Badge 
+                            variant={
+                              shipper.status.toLowerCase() === "active" ? "confirmed" : 
+                              shipper.status.toLowerCase() === "pending" ? "pending" : 
+                              "cancelled"
+                            }
+                          >
+                            {shipper.status}
+                          </Badge>
                         </div>
 
                         {/* Stats */}
@@ -840,6 +946,61 @@ export default function ShippersPage() {
               </motion.div>
             ))}
           </div>
+
+          {/* Pagination Section */}
+          {filteredShippers.length > 0 && (
+            <div className="flex items-center justify-between border-t border-gray-100 pt-8 mt-10">
+              <div className="text-sm text-gray-600">
+                Showing <span className="font-semibold text-gray-800">{startIndex + 1}</span> to <span className="font-semibold text-gray-800">{Math.min(endIndex, filteredShippers.length)}</span> of <span className="font-semibold text-gray-800">{filteredShippers.length}</span> shippers
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 border border-gray-100"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 border border-gray-100"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                <div className="text-sm font-medium text-gray-500 px-4">
+                  Page <span className="text-gray-900">{currentPage}</span> of <span className="text-gray-900">{totalPages}</span>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 border border-gray-100"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 border border-gray-100"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </motion.div>
       )}
 
@@ -871,15 +1032,23 @@ export default function ShippersPage() {
             transition={{ duration: 0.4, delay: 0.3 }}
           >
             <Card>
-              <CardContent className="p-6">
+              <CardContent className="p-6" suppressHydrationWarning>
                 <div className="flex items-start gap-6 mb-6">
                   <motion.div
                     layoutId={`profile-icon-${selectedShipper.id}`}
                     whileHover={{ scale: 1.05, rotate: 5 }}
                     transition={{ type: "spring", stiffness: 300 }}
-                    className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center flex-shrink-0 cursor-pointer shadow-lg hover:shadow-xl transition-shadow"
+                    className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center flex-shrink-0 cursor-pointer shadow-lg hover:shadow-xl transition-shadow overflow-hidden"
                   >
-                    <User className="h-12 w-12 text-white" />
+                    {selectedShipper.profileImage ? (
+                      <img 
+                        src={selectedShipper.profileImage}
+                        alt={selectedShipper.companyName}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <User className="h-12 w-12 text-white" />
+                    )}
                   </motion.div>
                   <div className="flex-1">
                     <h1 className="text-2xl font-bold text-gray-700">
@@ -1006,7 +1175,7 @@ export default function ShippersPage() {
                   KYC Details
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-6">
+              <CardContent className="p-6" suppressHydrationWarning>
                 {profileLoading ? (
                   <div className="flex items-center justify-center py-16">
                     <div className="text-center">
@@ -1015,7 +1184,7 @@ export default function ShippersPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-8">
+                  <div className="space-y-8" suppressHydrationWarning>
                     {/* Company Registration */}
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
@@ -1766,7 +1935,13 @@ export default function ShippersPage() {
                             </div>
                             <p className="text-sm font-bold text-gray-700">
                               {load.pickup_date
-                                ? new Date(load.pickup_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                                ? (() => {
+                                    const date = new Date(load.pickup_date);
+                                    const day = date.getUTCDate();
+                                    const month = date.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+                                    const year = date.getUTCFullYear();
+                                    return `${day} ${month} ${year}`;
+                                  })()
                                 : "Not Set"}
                             </p>
                           </div>
@@ -1781,7 +1956,16 @@ export default function ShippersPage() {
                             </div>
                             <p className="text-sm font-bold text-gray-700">
                               {load.load_time
-                                ? new Date(load.load_time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+                                ? (() => {
+                                    const date = new Date(load.load_time);
+                                    let hours = date.getUTCHours();
+                                    const minutes = date.getUTCMinutes();
+                                    const ampm = hours >= 12 ? 'pm' : 'am';
+                                    hours = hours % 12;
+                                    hours = hours ? hours : 12; // 0 should be 12
+                                    const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+                                    return `${hours}:${minutesStr} ${ampm}`;
+                                  })()
                                 : "Not Set"}
                             </p>
                           </div>
@@ -1797,6 +1981,15 @@ export default function ShippersPage() {
                           >
                             <Eye className="mr-2 h-4 w-4" />
                             Load Details
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700"
+                            onClick={() => handleViewBids(load)}
+                          >
+                            <TrendingUp className="mr-2 h-4 w-4" />
+                            View Bids
                           </Button>
                           <Button
                             size="sm"
@@ -2272,7 +2465,7 @@ export default function ShippersPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-xl font-bold text-gray-700">
-                    {selectedLoad.loadNumber}
+                    {selectedLoad?.loadNumber || loadDetail?.load_id || "N/A"}
                   </h2>
                   <p className="text-sm text-gray-600 mt-0.5">
                     Bids for this load
@@ -2283,7 +2476,7 @@ export default function ShippersPage() {
                     Load Value
                   </p>
                   <p className="text-2xl font-bold text-gray-700">
-                    {formatCurrency(selectedLoad.revenue)}
+                    ₹{parseFloat(loadDetail?.price || selectedLoad?.revenue || "0").toLocaleString("en-IN")}
                   </p>
                 </div>
               </div>
@@ -2294,43 +2487,40 @@ export default function ShippersPage() {
                     Material
                   </p>
                   <p className="text-sm font-bold text-gray-700">
-                    {selectedLoad.cargo.category}
+                    {loadDetail?.material || "N/A"}
                   </p>
                   <p className="text-xs text-gray-600">
-                    {selectedLoad.cargo.type}
+                    Quantity: {loadDetail?.load_qty || "N/A"}
                   </p>
                 </div>
 
-                {selectedLoad.vehicleRequirements && (
+                {(loadDetail?.vehicle_body || loadDetail?.vehicle_type) && (
                   <>
                     <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
                       <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">
-                        Required Body Type
+                        Vehicle Body Type
                       </p>
                       <p className="text-sm font-bold text-gray-700 capitalize">
-                        {selectedLoad.vehicleRequirements.bodyType.replace(
-                          "-",
-                          " "
-                        )}
+                        {loadDetail?.vehicle_body || "N/A"}
                       </p>
                     </div>
 
                     <div className="p-3 rounded-lg bg-purple-50 border border-purple-100">
                       <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-1">
-                        Vehicle Size
+                        Vehicle Type
                       </p>
                       <p className="text-sm font-bold text-gray-700">
-                        {selectedLoad.vehicleRequirements.size}
+                        {loadDetail?.vehicle_type || "N/A"}
                       </p>
                     </div>
 
-                    {selectedLoad.vehicleRequirements.capacity && (
+                    {loadDetail?.container_feet && (
                       <div className="p-3 rounded-lg bg-amber-50 border border-amber-100">
                         <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">
-                          Capacity
+                          Container Size
                         </p>
                         <p className="text-sm font-bold text-gray-700">
-                          {selectedLoad.vehicleRequirements.capacity}
+                          {loadDetail.container_feet} ft
                         </p>
                       </div>
                     )}

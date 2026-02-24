@@ -1,13 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { User, MapPin, Edit, Camera, X } from "lucide-react";
+import { User, MapPin, Edit, Camera, X, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import apiClient from "@/lib/api/client";
+import { BASE_URL } from "@/config/page";
+import Image from "next/image";
+
+interface EmployeeData {
+  id: number;
+  emp_id: string;
+  full_name: string;
+  email: string;
+  mobile: string;
+  department: string;
+  designation: string;
+  doj: string;
+  work_location: string;
+  current_address: string;
+  city: string;
+  state: string;
+  pin: string;
+  photo_path?: string;
+}
 
 export default function ProfilePage() {
   const [isEditMode, setIsEditMode] = useState(false);
+  const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchEmployeeData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await apiClient.get("/api/dashboard/employees/15");
+        
+        console.log("API Response:", response.data);
+        
+        if (response.data && response.data.status && response.data.data) {
+          setEmployeeData(response.data.data);
+        } else {
+          setError("No data received from API");
+        }
+      } catch (err: any) {
+        console.error("Error fetching employee data:", err);
+        const errorMessage = err.response?.data?.message || err.message || "Failed to fetch employee data";
+        setError(errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEmployeeData();
+  }, []);
 
   const InfoRow = ({ label, value }: { label: string; value: string }) => (
     <div className="flex flex-col space-y-1 py-3 border-b border-gray-100 last:border-0">
@@ -24,6 +73,43 @@ export default function ProfilePage() {
       alert("Image upload functionality will be implemented");
     }
   };
+
+  const getInitials = (name: string) => {
+    if (!name) return "NA";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "N/A";
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-GB");
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-12 w-12 animate-spin text-blue-600" />
+          <p className="mt-4 text-gray-600">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !employeeData) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600">{error || "Failed to load profile"}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -58,9 +144,30 @@ export default function ProfilePage() {
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between">
               <div className="flex flex-col sm:flex-row sm:items-end gap-4">
                 <div className="relative">
-                  <div className="-mt-16 h-32 w-32 rounded-full border-4 border-white bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-4xl font-bold shadow-lg">
-                    NS
-                  </div>
+                  {employeeData?.photo_path ? (
+                    <div className="-mt-16 h-32 w-32 rounded-full border-4 border-white shadow-lg overflow-hidden bg-white">
+                      <Image
+                        src={`${BASE_URL}/${employeeData.photo_path}`}
+                        alt={employeeData.full_name || "Profile"}
+                        width={128}
+                        height={128}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to initials if image fails to load
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-4xl font-bold">${getInitials(employeeData?.full_name || "")}</div>`;
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="-mt-16 h-32 w-32 rounded-full border-4 border-white bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-4xl font-bold shadow-lg">
+                      {getInitials(employeeData?.full_name || "")}
+                    </div>
+                  )}
                   {isEditMode && (
                     <label 
                       htmlFor="profile-upload"
@@ -78,16 +185,16 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <div className="pb-2">
-                  <h1 className="text-2xl font-bold text-gray-900">Nandani Saraswat</h1>
-                  <p className="text-gray-600 font-medium">Application Developer</p>
+                  <h1 className="text-2xl font-bold text-gray-900">{employeeData?.full_name || "N/A"}</h1>
+                  <p className="text-gray-600 font-medium">{employeeData?.designation || "N/A"}</p>
                   <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
                     <div className="flex items-center gap-1">
                       <User className="h-4 w-4" />
-                      IT Department
+                      {employeeData?.department || "N/A"} Department
                     </div>
                     <div className="flex items-center gap-1">
                       <MapPin className="h-4 w-4" />
-                      Noida, Uttar Pradesh
+                      {employeeData?.city || "N/A"}, {employeeData?.state || "N/A"}
                     </div>
                   </div>
                 </div>
@@ -140,14 +247,14 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-2 gap-x-8">
-              <InfoRow label="Full Name" value="Nandani Saraswat" />
-              <InfoRow label="Email" value="nandani.truckmitr@gmail.com" />
-              <InfoRow label="Mobile" value="6265760864" />
-              <InfoRow label="Employee ID" value="TM2511DLEM00005" />
-              <InfoRow label="Department" value="IT" />
-              <InfoRow label="Designation" value="Application Developer" />
-              <InfoRow label="Date of Joining" value="11/6/2025" />
-              <InfoRow label="Work Location" value="C104, sector 65, noida, uttar pradesh" />
+              <InfoRow label="Full Name" value={employeeData?.full_name || "N/A"} />
+              <InfoRow label="Email" value={employeeData?.email || "N/A"} />
+              <InfoRow label="Mobile" value={employeeData?.mobile || "N/A"} />
+              <InfoRow label="Employee ID" value={employeeData?.emp_id || "N/A"} />
+              <InfoRow label="Department" value={employeeData?.department || "N/A"} />
+              <InfoRow label="Designation" value={employeeData?.designation || "N/A"} />
+              <InfoRow label="Date of Joining" value={formatDate(employeeData?.doj || "")} />
+              <InfoRow label="Work Location" value={employeeData?.work_location || "N/A"} />
             </div>
           </CardContent>
         </Card>
@@ -171,12 +278,12 @@ export default function ProfilePage() {
               <div className="md:col-span-2">
                 <InfoRow 
                   label="Current Address" 
-                  value="Niksam girls pg , gayatri bhawan, ch-24, gali no. 1, chhijarsi, chhajarsi colony, sector 63, noida, uttar pradesh" 
+                  value={employeeData?.current_address || "N/A"} 
                 />
               </div>
-              <InfoRow label="City" value="Noida" />
-              <InfoRow label="State" value="Delhi" />
-              <InfoRow label="PIN Code" value="201309" />
+              <InfoRow label="City" value={employeeData?.city || "N/A"} />
+              <InfoRow label="State" value={employeeData?.state || "N/A"} />
+              <InfoRow label="PIN Code" value={employeeData?.pin || "N/A"} />
             </div>
           </CardContent>
         </Card>

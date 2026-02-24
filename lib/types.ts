@@ -120,6 +120,7 @@ export interface Shipper {
   rating: number;
   activeLoadsCount: number;
   totalRatings: number;
+  profileImage: string | null;
   // New API fields
   companyRegistrationType: string | null;
   yearsInBusiness: string | null;

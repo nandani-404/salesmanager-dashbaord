@@ -10,6 +10,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { Search, Filter, Download, Eye, Edit, MapPin, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import apiClient from "@/lib/api/client";
+import { API_ENDPOINTS } from "@/config/page";
 
 interface AcceptedLoad {
   load_id: number;
@@ -156,7 +157,7 @@ export default function LoadsPage() {
                   Route
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">
-                  Cargo
+                  Material
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">
                   Pickup Date
@@ -230,10 +231,11 @@ export default function LoadsPage() {
                       >
                         <Eye className="h-4 w-4 text-gray-600" />
                       </button>
-                      <button className="rounded p-1 hover:bg-gray-100 transition-colors" title="Edit">
-                        <Edit className="h-4 w-4 text-gray-600" />
-                      </button>
-                      <button className="rounded p-1 hover:bg-gray-100 transition-colors" title="Track">
+                      <button 
+                        onClick={() => router.push("/in-transit")}
+                        className="rounded p-1 hover:bg-gray-100 transition-colors" 
+                        title="Track"
+                      >
                         <MapPin className="h-4 w-4 text-gray-600" />
                       </button>
                     </div>

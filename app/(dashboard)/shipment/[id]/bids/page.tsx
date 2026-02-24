@@ -20,17 +20,25 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import apiClient from "@/lib/api/client";
+import { API_ENDPOINTS } from "@/config/page";
 
 interface Application {
   id: number;
-  load_id: string;
-  user_id: string;
-  trucker_name: string;
-  transport_name: string;
-  bid_amount: string;
+  post_id: string;
+  trucker_id: string;
+  name: string;
+  Transport_Name: string;
   vehicle_number: string;
-  status: string;
+  driver_name: string;
+  dl_number: string;
+  driver_phone: string;
+  trucker_price: string;
   created_at: string;
+  origin_location?: string;
+  destination_location?: string;
+  material_name?: string;
+  meterial_quantity?: string;
+  load_price?: string;
 }
 
 interface LoadDetail {
@@ -53,6 +61,7 @@ export default function ShipmentBidsPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [counterDialogOpen, setCounterDialogOpen] = useState<string | null>(null);
   const [counterAmount, setCounterAmount] = useState("");
   const [counterOffers, setCounterOffers] = useState<Record<string, number>>({});
@@ -60,6 +69,9 @@ export default function ShipmentBidsPage({
   const [finalShipperPrice, setFinalShipperPrice] = useState("");
   const [finalTruckerPrice, setFinalTruckerPrice] = useState("");
   const [finalStatus, setFinalStatus] = useState<"match" | "unmatch">("match");
+  const [acceptLoading, setAcceptLoading] = useState(false);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
+  const [acceptSuccess, setAcceptSuccess] = useState(false);
   
   // API state
   const [applications, setApplications] = useState<Application[]>([]);
@@ -68,63 +80,85 @@ export default function ShipmentBidsPage({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     const fetchApplications = async () => {
       try {
         setLoading(true);
         setError(null);
         console.log("Fetching applications for load ID:", id);
         
+        // Always try to fetch load details from shipments API first
+        try {
+          const shipmentsResponse = await apiClient.get<any>('/api/dashboard/shipments/loads');
+          const loads = shipmentsResponse.data?.loads || [];
+          const currentLoad = loads.find((l: any) => l.id.toString() === id.toString());
+          
+          if (currentLoad) {
+            console.log("Found load in shipments:", currentLoad);
+            setLoadDetail({
+              id: currentLoad.id,
+              load_id: currentLoad.load_id,
+              shipper_name: currentLoad.shipper_name || currentLoad.company_name || "Shipper",
+              origin_location: currentLoad.origin_location,
+              destination_location: currentLoad.destination_location,
+              material_name: currentLoad.material_name,
+              load_qty: currentLoad.load_qty,
+              price: currentLoad.price,
+              pickup_date: currentLoad.pickup_date,
+              load_time: currentLoad.load_time,
+            });
+          }
+        } catch (loadErr) {
+          console.log("Could not fetch load details from shipments API:", loadErr);
+        }
+        
+        // Then fetch applications
         try {
           const response = await apiClient.get<any>(`/api/dashboard/load/${id}/applications`);
           console.log("Applications response:", response.data);
           
           const data = response.data;
-          // Handle response structure
-          if (data.applications) {
-            setApplications(data.applications);
-          } else if (data.data) {
+          
+          // Extract load detail from response if available (override shipments data if present)
+          if (data.load) {
+            setLoadDetail(data.load);
+          } else if (data.data && data.data.length > 0 && data.data[0].origin_location) {
+            // If load details not in response but in application data, use from first application
+            const firstApp = data.data[0];
+            setLoadDetail({
+              id: id,
+              load_id: `TMLD${id}`,
+              shipper_name: "Shipper",
+              origin_location: firstApp.origin_location,
+              destination_location: firstApp.destination_location,
+              material_name: firstApp.material_name,
+              load_qty: firstApp.meterial_quantity || "0",
+              price: firstApp.load_price || "0",
+              pickup_date: null,
+              load_time: null,
+            });
+          }
+          
+          // Handle response structure - data is directly in data.data array
+          if (data.data && Array.isArray(data.data)) {
             setApplications(data.data);
+          } else if (data.applications) {
+            setApplications(data.applications);
           } else if (Array.isArray(data)) {
             setApplications(data);
           } else {
             setApplications([]);
           }
-          
-          // Extract load detail if available
-          if (data.load) {
-            setLoadDetail(data.load);
-          }
         } catch (appErr: any) {
           const status = appErr?.response?.status;
           console.log("Applications API error status:", status);
           
-          // If 404, try to at least get the load details from shipments API
+          // If 404, just set empty applications (load details already fetched above)
           if (status === 404) {
-            console.log("No applications found (404), trying to fetch load details from shipments API");
-            try {
-              const shipmentsResponse = await apiClient.get<any>('/api/dashboard/shipments/loads');
-              const loads = shipmentsResponse.data?.loads || [];
-              const currentLoad = loads.find((l: any) => l.id === id);
-              
-              if (currentLoad) {
-                console.log("Found load in shipments:", currentLoad);
-                setLoadDetail({
-                  id: currentLoad.id,
-                  load_id: currentLoad.load_id,
-                  shipper_name: currentLoad.shipper_name,
-                  origin_location: currentLoad.origin_location,
-                  destination_location: currentLoad.destination_location,
-                  material_name: currentLoad.material_name,
-                  load_qty: currentLoad.load_qty,
-                  price: currentLoad.price,
-                  pickup_date: currentLoad.pickup_date,
-                  load_time: currentLoad.load_time,
-                });
-              }
-            } catch (loadErr) {
-              console.log("Could not fetch load details from shipments API");
-            }
-            
+            console.log("No applications found (404)");
             setApplications([]);
             setError(null); // Don't show error for 404
           } else {
@@ -150,17 +184,70 @@ export default function ShipmentBidsPage({
     console.log("Mapping application:", app);
     return {
       id: app.id.toString(),
-      loadId: app.load_id,
-      truckerName: app.trucker_name || "Unknown Trucker",
-      truckerCompany: app.transport_name || app.trucker_name || "Unknown Company",
-      bidAmount: parseFloat(app.bid_amount) || 0,
+      loadId: app.post_id,
+      truckerId: app.trucker_id,
+      truckerName: app.name || "Unknown Trucker",
+      truckerCompany: app.Transport_Name || app.name || "Unknown Company",
+      bidAmount: parseFloat(app.trucker_price) || 0,
       truckNumber: app.vehicle_number || "N/A",
-      status: app.status || "pending",
+      driverName: app.driver_name || "N/A",
+      driverLicense: app.dl_number || "N/A",
+      driverPhone: app.driver_phone || "N/A",
+      status: "pending",
       submittedAt: new Date(app.created_at),
+      // Additional load information from application
+      originLocation: app.origin_location || null,
+      destinationLocation: app.destination_location || null,
+      materialName: app.material_name || null,
+      materialQuantity: app.meterial_quantity || null,
+      loadPrice: app.load_price ? parseFloat(app.load_price) : null,
     };
   });
   
   console.log("Mapped bids:", bids);
+
+  // Handle accept bid
+  const handleAcceptBid = async (bidId: string) => {
+    setAcceptLoading(true);
+    setAcceptError(null);
+    setAcceptSuccess(false);
+
+    try {
+      // Find the bid to get additional data
+      const bid = bids.find(b => b.id === bidId);
+      
+      const payload = {
+        apply_id: parseInt(bidId),
+        trucker_updated_price: parseFloat(finalTruckerPrice) || 0,
+        shipper_updated_price: parseFloat(finalShipperPrice) || 0,
+        final_status: finalStatus === "match" ? 1 : 0,
+      };
+
+      console.log("Accepting bid with payload:", payload);
+
+      const response = await apiClient.post(API_ENDPOINTS.dashboard.applicationUpdate, payload);
+      
+      console.log("Accept bid response:", response.data);
+      
+      setAcceptSuccess(true);
+      
+      // Close dialog after 2 seconds and refresh
+      setTimeout(() => {
+        setAcceptDialogOpen(null);
+        setFinalShipperPrice("");
+        setFinalTruckerPrice("");
+        setFinalStatus("match");
+        setAcceptSuccess(false);
+        // Refresh the page to get updated data
+        window.location.reload();
+      }, 2000);
+    } catch (err: any) {
+      console.error("Failed to accept bid:", err);
+      setAcceptError(err?.response?.data?.message || err?.message || "Failed to accept bid");
+    } finally {
+      setAcceptLoading(false);
+    }
+  };
 
   // Create load object from API data or use defaults
   const load = loadDetail ? {
@@ -182,6 +269,26 @@ export default function ShipmentBidsPage({
     revenue: parseFloat(loadDetail.price) || 0,
     pickupDate: loadDetail.pickup_date ? new Date(loadDetail.pickup_date) : new Date(),
     pickupTime: loadDetail.load_time || "N/A",
+  } : bids.length > 0 && bids[0].originLocation ? {
+    // Use data from first bid if loadDetail is not available
+    id: id,
+    loadNumber: `TMLD${id}`,
+    shipperName: "Shipper",
+    origin: {
+      city: bids[0].originLocation?.split(",")[0]?.trim() || "N/A",
+      state: bids[0].originLocation?.split(",")[1]?.trim() || "N/A",
+    },
+    destination: {
+      city: bids[0].destinationLocation?.split(",")[0]?.trim() || "N/A",
+      state: bids[0].destinationLocation?.split(",")[1]?.trim() || "N/A",
+    },
+    cargo: {
+      type: bids[0].materialName || "N/A",
+      weight: parseFloat(bids[0].materialQuantity || "0") * 1000 || 0,
+    },
+    revenue: bids[0].loadPrice || 0,
+    pickupDate: new Date(),
+    pickupTime: "N/A",
   } : {
     id: id,
     loadNumber: `TMLD${id}`,
@@ -216,6 +323,15 @@ export default function ShipmentBidsPage({
     );
   }
 
+  if (!mounted) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
+        <p className="text-gray-600">Loading...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-8">
       {/* Header */}
@@ -227,7 +343,7 @@ export default function ShipmentBidsPage({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push(`/shipment/${id}`)}
+            onClick={() => router.push('/shipment')}
             className="h-9 w-9 p-0 rounded-lg"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -251,11 +367,11 @@ export default function ShipmentBidsPage({
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 uppercase mb-0.5">Cargo</p>
+                <p className="text-xs text-gray-500 uppercase mb-0.5">Material</p>
                 <p className="font-semibold text-gray-900 text-sm">{load.cargo.type}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 uppercase mb-0.5">Weight</p>
+                <p className="text-xs text-gray-500 uppercase mb-0.5">Quantity</p>
                 <p className="font-semibold text-gray-900 text-sm">{(load.cargo.weight / 1000).toFixed(1)} T</p>
               </div>
             </div>
@@ -327,40 +443,32 @@ export default function ShipmentBidsPage({
                   </div>
 
                   {/* Details Row */}
-                  {index === 0 ? (
-                    // First bid card - No truck number and RC number
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-600 italic">Vehicle details not provided</p>
-                    </div>
-                  ) : (
-                    // Second and subsequent bid cards - Show vehicle and driver details
-                    <div className="space-y-3 mb-4">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <p className="text-xs text-gray-500 uppercase mb-1">Vehicle ID</p>
-                          <p className="font-semibold text-gray-900">VEH-{bid.id.padStart(4, '0')}</p>
-                        </div>
-                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <p className="text-xs text-gray-500 uppercase mb-1">Truck Number</p>
-                          <p className="font-semibold text-gray-900">{bid.truckNumber}</p>
-                        </div>
+                  <div className="space-y-3 mb-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-500 uppercase mb-1">Trucker ID</p>
+                        <p className="font-semibold text-gray-900">{bid.truckerId}</p>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <p className="text-xs text-gray-500 uppercase mb-1">Driver Name</p>
-                          <p className="font-semibold text-gray-900 text-sm">Rajesh Kumar</p>
-                        </div>
-                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <p className="text-xs text-gray-500 uppercase mb-1">License Number</p>
-                          <p className="font-semibold text-gray-900 text-sm">DL-{bid.id}234567</p>
-                        </div>
-                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <p className="text-xs text-gray-500 uppercase mb-1">Driver Phone</p>
-                          <p className="font-semibold text-gray-900 text-sm">+91-98765-432{bid.id}0</p>
-                        </div>
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-500 uppercase mb-1">Truck Number</p>
+                        <p className="font-semibold text-gray-900">{bid.truckNumber}</p>
                       </div>
                     </div>
-                  )}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-500 uppercase mb-1">Driver Name</p>
+                        <p className="font-semibold text-gray-900 text-sm">{bid.driverName}</p>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-500 uppercase mb-1">License Number</p>
+                        <p className="font-semibold text-gray-900 text-sm">{bid.driverLicense}</p>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-500 uppercase mb-1">Driver Phone</p>
+                        <p className="font-semibold text-gray-900 text-sm">{bid.driverPhone}</p>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
@@ -368,7 +476,7 @@ export default function ShipmentBidsPage({
                       size="sm"
                       variant="outline"
                       className="flex-1 border-blue-300 hover:bg-blue-50 hover:text-blue-700 h-9"
-                      onClick={() => router.push(`/truckers/${bid.id}`)}
+                      onClick={() => router.push(`/truckers/${bid.truckerId}`)}
                     >
                       <User className="mr-1.5 h-4 w-4" />
                       View Profile
@@ -377,7 +485,7 @@ export default function ShipmentBidsPage({
                       size="sm"
                       variant="outline"
                       className="flex-1 border-purple-300 hover:bg-purple-50 hover:text-purple-700 h-9"
-                      onClick={() => router.push(`/truckers/${bid.id}/vehicles`)}
+                      onClick={() => router.push(`/truckers/${bid.truckerId}/vehicles`)}
                     >
                       <Truck className="mr-1.5 h-4 w-4" />
                       View Truck
@@ -517,13 +625,22 @@ export default function ShipmentBidsPage({
                         <Button
                           size="sm"
                           onClick={() => {
-                            alert(`Bid accepted!\nShipper Price: ₹${finalShipperPrice}\nTrucker Price: ₹${finalTruckerPrice}\nStatus: ${finalStatus}`);
-                            setAcceptDialogOpen(null);
+                            handleAcceptBid(bid.id);
                           }}
-                          className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-9 font-bold shadow-md"
+                          disabled={acceptLoading}
+                          className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-9 font-bold shadow-md disabled:opacity-50"
                         >
-                          <CheckCircle className="mr-1.5 h-4 w-4" />
-                          Confirm
+                          {acceptLoading ? (
+                            <>
+                              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="mr-1.5 h-4 w-4" />
+                              Confirm
+                            </>
+                          )}
                         </Button>
                         <Button
                           size="sm"
@@ -533,12 +650,31 @@ export default function ShipmentBidsPage({
                             setFinalShipperPrice("");
                             setFinalTruckerPrice("");
                             setFinalStatus("match");
+                            setAcceptError(null);
+                            setAcceptSuccess(false);
                           }}
+                          disabled={acceptLoading}
                           className="border-2 border-gray-300 hover:bg-gray-100 h-9 px-6 font-semibold"
                         >
                           Cancel
                         </Button>
                       </div>
+
+                      {/* Success Message */}
+                      {acceptSuccess && (
+                        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <p className="text-sm font-semibold text-green-800">Bid accepted successfully!</p>
+                        </div>
+                      )}
+
+                      {/* Error Message */}
+                      {acceptError && (
+                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                          <AlertCircle className="h-5 w-5 text-red-600" />
+                          <p className="text-sm font-semibold text-red-800">{acceptError}</p>
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </div>
