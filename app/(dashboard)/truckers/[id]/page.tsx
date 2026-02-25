@@ -54,6 +54,7 @@ export default function TruckerProfilePage() {
   const [updateStatusLoading, setUpdateStatusLoading] = useState(false);
   const [updateStatusSuccess, setUpdateStatusSuccess] = useState(false);
   const [updateStatusError, setUpdateStatusError] = useState<string | null>(null);
+  const [kycVerified, setKycVerified] = useState<number>(0);
 
   useEffect(() => {
     const fetchTruckerDetail = async () => {
@@ -62,7 +63,10 @@ export default function TruckerProfilePage() {
         const response = await apiClient.get<{ trucker: TruckerDetail }>(
           API_ENDPOINTS.dashboard.truckerDetail(truckerId)
         );
+        console.log('Trucker verified_trucker_shipper:', response.data.trucker.verified_trucker_shipper);
         setTrucker(response.data.trucker);
+        // Initialize kycVerified state with actual value from API
+        setKycVerified(parseInt(response.data.trucker.verified_trucker_shipper || "0"));
         setError(null);
       } catch (err: any) {
         console.error("Failed to fetch trucker details:", err);
@@ -77,7 +81,7 @@ export default function TruckerProfilePage() {
     }
   }, [truckerId]);
 
-  const handleUpdateStatus = async (verified: number) => {
+  const handleUpdateStatus = async () => {
     if (!trucker) return;
     
     setUpdateStatusLoading(true);
@@ -87,7 +91,7 @@ export default function TruckerProfilePage() {
     try {
       await apiClient.post(
         API_ENDPOINTS.dashboard.truckerUpdateStatus(trucker.id),
-        { verified_trucker_shipper: verified }
+        { verified_trucker_shipper: kycVerified }
       );
       
       setUpdateStatusSuccess(true);
@@ -95,11 +99,11 @@ export default function TruckerProfilePage() {
       // Update local trucker state
       setTrucker({
         ...trucker,
-        verified_trucker_shipper: verified.toString()
+        verified_trucker_shipper: kycVerified.toString()
       });
       
-      // Auto-hide success message after 3 seconds
-      setTimeout(() => setUpdateStatusSuccess(false), 3000);
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => setUpdateStatusSuccess(false), 5000);
     } catch (err: any) {
       console.error("Failed to update trucker status:", err);
       setUpdateStatusError(
@@ -143,7 +147,7 @@ export default function TruckerProfilePage() {
         >
           <Button variant="outline" onClick={() => router.back()}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Truckers
+            Back
           </Button>
         </motion.div>
 
@@ -188,29 +192,23 @@ export default function TruckerProfilePage() {
                     {trucker.email && (
                       <div className="flex items-center gap-2">
                         <Mail className="h-4 w-4 text-gray-400" />
-                        <a
-                          href={`mailto:${trucker.email}`}
-                          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                        >
-                          {trucker.email}
-                        </a>
+                        <span className="text-sm text-gray-600 font-medium">
+                          {trucker.email.replace(/(.{2})(.*)(@.*)/, '$1****$3')}
+                        </span>
                       </div>
                     )}
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-gray-400" />
-                      <a
-                        href={`tel:${trucker.mobile}`}
-                        className="text-sm text-gray-600 hover:text-gray-700 font-medium"
-                      >
-                        {trucker.mobile}
-                      </a>
+                      <span className="text-sm text-gray-600 font-medium">
+                        {trucker.mobile.replace(/(\d{2})(\d{4})(\d{4})/, '$1****$3')}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Quick Stats */}
-              <div className="grid gap-4 sm:grid-cols-4 mb-6">
+              <div className="grid gap-4 sm:grid-cols-3 mb-6">
                 <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 px-4 py-3 rounded-lg">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                     Total Vehicles
@@ -235,33 +233,10 @@ export default function TruckerProfilePage() {
                     {trucker.Year_of_Establishment || "N/A"}
                   </p>
                 </div>
-                <div className="bg-white border border-gray-200 px-4 py-3 rounded-lg">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Status
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {trucker.verified_trucker_shipper === "1" ? (
-                      <ShieldCheck className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 text-amber-600" />
-                    )}
-                    <span className="text-lg font-bold text-gray-800">
-                      {trucker.verified_trucker_shipper === "1" ? "Verified" : "Pending"}
-                    </span>
-                  </div>
-                </div>
               </div>
 
               {/* Action Buttons */}
               <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-all"
-                  onClick={() => window.location.href = `mailto:${trucker.email}`}
-                >
-                  <Mail className="mr-2 h-4 w-4" />
-                  Send Email
-                </Button>
                 <Button
                   variant="outline"
                   className="hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-all"
@@ -729,21 +704,22 @@ export default function TruckerProfilePage() {
           </Card>
         </motion.div>
 
-        {/* Status & Action */}
+        {/* Approve Trucker */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.5 }}
         >
           <Card>
+            <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50 border-b">
+              <CardTitle className="flex items-center gap-2 text-gray-800">
+                <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+                  <ShieldCheck className="h-5 w-5 text-white" />
+                </div>
+                Approve Trucker
+              </CardTitle>
+            </CardHeader>
             <CardContent className="p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-6 w-1 bg-gradient-to-b from-indigo-600 to-blue-400 rounded-full" />
-                <h3 className="text-base font-semibold text-gray-700">
-                  Account Status
-                </h3>
-              </div>
-              
               {/* Success Message */}
               {updateStatusSuccess && (
                 <motion.div
@@ -755,10 +731,13 @@ export default function TruckerProfilePage() {
                   <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                     <Check className="h-5 w-5 text-green-600" />
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-green-800">Status updated successfully!</p>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-green-800">Status Updated Successfully!</p>
                     <p className="text-xs text-green-600 mt-0.5">Trucker verification status has been saved.</p>
                   </div>
+                  <button onClick={() => setUpdateStatusSuccess(false)} className="text-green-400 hover:text-green-600">
+                    <X className="h-4 w-4" />
+                  </button>
                 </motion.div>
               )}
 
@@ -772,54 +751,63 @@ export default function TruckerProfilePage() {
                   <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
                     <AlertCircle className="h-5 w-5 text-red-600" />
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-red-800">Failed to update status</p>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-red-800">Update Failed</p>
                     <p className="text-xs text-red-600 mt-0.5">{updateStatusError}</p>
                   </div>
+                  <button onClick={() => setUpdateStatusError(null)} className="text-red-400 hover:text-red-600">
+                    <X className="h-4 w-4" />
+                  </button>
                 </motion.div>
               )}
-              
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {trucker.verified_trucker_shipper === "1" ? (
-                    <span className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-sm font-semibold shadow-sm">
-                      <ShieldCheck className="h-4 w-4 mr-2" />
-                      Verified
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-semibold shadow-sm">
-                      <ClockIcon className="h-4 w-4 mr-2" />
-                      Pending Approval
-                    </span>
-                  )}
+
+              <div className="space-y-4">
+                {/* KYC Verified Dropdown */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    KYC Verified
+                  </label>
+                  <select
+                    value={kycVerified}
+                    onChange={(e) => setKycVerified(Number(e.target.value))}
+                    className="w-full bg-white border border-gray-200 px-4 py-3 rounded-lg hover:border-indigo-300 hover:shadow-sm transition-all text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    <option value={0}>Not Verified</option>
+                    <option value={1}>Verified</option>
+                  </select>
                 </div>
-                <div className="flex gap-3">
+
+                {/* Submit Button */}
+                <div className="flex items-center gap-3">
                   <Button
-                    size="sm"
-                    onClick={() => handleUpdateStatus(1)}
-                    disabled={updateStatusLoading || trucker.verified_trucker_shipper === "1"}
-                    className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleUpdateStatus}
+                    disabled={updateStatusLoading}
+                    className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-2.5 shadow-md hover:shadow-lg transition-all"
                   >
                     {updateStatusLoading ? (
-                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Updating...
+                      </>
                     ) : (
-                      <Check className="mr-1.5 h-4 w-4" />
+                      <>
+                        <Check className="mr-2 h-4 w-4" />
+                        Update Status
+                      </>
                     )}
-                    Approve
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleUpdateStatus(0)}
-                    disabled={updateStatusLoading || trucker.verified_trucker_shipper === "0"}
-                    className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="border-red-200 text-red-600 hover:bg-red-50"
+                    onClick={() => {
+                      setKycVerified(0);
+                      setUpdateStatusError(null);
+                      setUpdateStatusSuccess(false);
+                    }}
                   >
-                    {updateStatusLoading ? (
-                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                    ) : (
-                      <X className="mr-1.5 h-4 w-4" />
-                    )}
-                    Reject
+                    <X className="mr-1 h-4 w-4" />
+                    Reset
                   </Button>
                 </div>
               </div>

@@ -1,11 +1,14 @@
 "use client";
 
-import { Search, Bell, Menu, LogOut, User } from "lucide-react";
+import { Menu, LogOut, User } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { useAppDispatch } from "@/lib/redux/hooks";
 import { logout as logoutAction } from "@/lib/redux/slices/authSlice";
+import apiClient from "@/lib/api/client";
+import { BASE_URL } from "@/config/page";
+import Image from "next/image";
 
 interface HeaderProps {
   title?: string;
@@ -13,12 +16,47 @@ interface HeaderProps {
   onMenuClick?: () => void;
 }
 
+interface EmployeeData {
+  id: number;
+  emp_id: string;
+  full_name: string;
+  email: string;
+  mobile: string;
+  department_id: string;
+  department_name: string;
+  designation: string;
+  doj: string;
+  work_location: string;
+  current_address: string;
+  city: string;
+  state_id: string;
+  state_name: string;
+  pin: string;
+  photo_path?: string;
+  photo_url?: string;
+}
+
 export function Header({ title, breadcrumbs, onMenuClick }: HeaderProps) {
-  const [searchQuery, setSearchQuery] = useState("");
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    const fetchEmployeeData = async () => {
+      try {
+        const response = await apiClient.get("/api/dashboard/employees/15");
+        if (response.data && response.data.status && response.data.data) {
+          setEmployeeData(response.data.data);
+        }
+      } catch (err) {
+        console.error("Error fetching employee data:", err);
+      }
+    };
+
+    fetchEmployeeData();
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -95,6 +133,16 @@ export function Header({ title, breadcrumbs, onMenuClick }: HeaderProps) {
     }
   };
 
+  const getInitials = (name: string) => {
+    if (!name) return "NA";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
       <div className="flex h-16 items-center justify-between px-4 md:px-6">
@@ -106,6 +154,15 @@ export function Header({ title, breadcrumbs, onMenuClick }: HeaderProps) {
           >
             <Menu className="h-6 w-6 text-gray-600" />
           </button>
+
+          {/* Logo - visible on mobile when sidebar is closed */}
+          <div className="flex items-center gap-2 md:hidden">
+            <img
+              src="/icons/logotrick.png"
+              alt="TruckMitr"
+              className="h-8 w-auto object-contain"
+            />
+          </div>
 
           {/* Breadcrumbs / Title */}
           <div>
@@ -132,41 +189,44 @@ export function Header({ title, breadcrumbs, onMenuClick }: HeaderProps) {
           </div>
         </div>
 
-        {/* Search & Actions */}
+        {/* Profile Dropdown */}
         <div className="flex items-center gap-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 w-64 rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Notifications */}
-          <button className="relative rounded-lg p-2 hover:bg-gray-100 transition-colors">
-            <Bell className="h-5 w-5 text-gray-600" />
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-          </button>
-
-          {/* Profile Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button 
               onClick={() => setShowProfileDropdown(!showProfileDropdown)}
               className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-gray-100 transition-colors"
             >
-              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-400" />
+              {employeeData?.photo_path ? (
+                <div className="h-8 w-8 rounded-full overflow-hidden bg-white border-2 border-gray-200">
+                  <Image
+                    src={`${BASE_URL}/storage/app/public/${employeeData.photo_path}`}
+                    alt={employeeData.full_name || "Profile"}
+                    width={32}
+                    height={32}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-violet-500 to-purple-400 flex items-center justify-center text-white text-xs font-bold">${getInitials(employeeData?.full_name || "")}</div>`;
+                      }
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-400 flex items-center justify-center text-white text-xs font-bold">
+                  {getInitials(employeeData?.full_name || "")}
+                </div>
+              )}
             </button>
 
             {/* Dropdown Menu */}
             {showProfileDropdown && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
                 <div className="px-4 py-3 border-b border-gray-100">
-                  <p className="text-sm font-semibold text-gray-900">Nandani Saraswat</p>
-                  <p className="text-xs text-gray-500">nandani.truckmitr@gmail.com</p>
+                  <p className="text-sm font-semibold text-gray-900">{employeeData?.full_name || "Loading..."}</p>
+                  <p className="text-xs text-gray-500">{employeeData?.email || ""}</p>
                 </div>
                 <button
                   onClick={() => {

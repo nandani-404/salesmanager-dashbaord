@@ -37,6 +37,24 @@ export default function TruckerVehiclesPage() {
   const [vehicles, setVehicles] = useState<ApiVehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [truckerUniqueId, setTruckerUniqueId] = useState<string>("");
+
+  useEffect(() => {
+    const fetchTruckerDetails = async () => {
+      try {
+        const response = await apiClient.get<any>(`/api/dashboard/trucker/${truckerId}`);
+        const truckerData = response.data.trucker;
+        setTruckerUniqueId(truckerData.unique_id || truckerId);
+      } catch (err) {
+        console.error("Failed to fetch trucker details:", err);
+        setTruckerUniqueId(truckerId);
+      }
+    };
+
+    if (truckerId) {
+      fetchTruckerDetails();
+    }
+  }, [truckerId]);
 
   useEffect(() => {
     const fetchVehicles = async () => {
@@ -138,7 +156,7 @@ export default function TruckerVehiclesPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-gray-700">Vehicles</h1>
-            <p className="text-sm text-gray-600 mt-1">Trucker ID: {truckerId}</p>
+            <p className="text-sm text-gray-600 mt-1">Trucker ID: {truckerUniqueId || truckerId}</p>
           </div>
         </motion.div>
 

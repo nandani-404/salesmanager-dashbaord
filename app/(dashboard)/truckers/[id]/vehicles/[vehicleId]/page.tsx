@@ -133,8 +133,8 @@ export default function VehicleDetailPage({
           <p className="text-gray-600 mb-6">
             {error || "The vehicle you're looking for doesn't exist."}
           </p>
-          <Button onClick={() => router.push(`/truckers/${truckerId}/vehicles`)} className="w-full">
-            Back to Vehicles
+          <Button onClick={() => router.back()} className="w-full">
+            Back
           </Button>
         </Card>
       </div>

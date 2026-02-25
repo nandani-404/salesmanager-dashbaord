@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { mockLoads } from "@/lib/mock-data";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Search, Filter, Download, Eye, Edit, MapPin, Loader2 } from "lucide-react";
+import { Search, Filter, Eye, Edit, MapPin, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import apiClient from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/config/page";
@@ -75,10 +75,6 @@ export default function LoadsPage() {
             Manage and track all accepted freight loads
           </p>
         </div>
-        <Button>
-          <Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
       </div>
 
       {/* Loading State */}

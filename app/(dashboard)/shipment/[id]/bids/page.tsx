@@ -26,6 +26,7 @@ interface Application {
   id: number;
   post_id: string;
   trucker_id: string;
+  unique_id: string;
   name: string;
   Transport_Name: string;
   vehicle_number: string;
@@ -62,6 +63,15 @@ export default function ShipmentBidsPage({
   const { id } = use(params);
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [searchParams, setSearchParams] = useState<URLSearchParams | null>(null);
+  
+  useEffect(() => {
+    // Get search params on client side
+    if (typeof window !== 'undefined') {
+      setSearchParams(new URLSearchParams(window.location.search));
+    }
+  }, []);
+  
   const [counterDialogOpen, setCounterDialogOpen] = useState<string | null>(null);
   const [counterAmount, setCounterAmount] = useState("");
   const [counterOffers, setCounterOffers] = useState<Record<string, number>>({});
@@ -186,6 +196,7 @@ export default function ShipmentBidsPage({
       id: app.id.toString(),
       loadId: app.post_id,
       truckerId: app.trucker_id,
+      truckerUniqueId: app.unique_id || "N/A",
       truckerName: app.name || "Unknown Trucker",
       truckerCompany: app.Transport_Name || app.name || "Unknown Company",
       bidAmount: parseFloat(app.trucker_price) || 0,
@@ -343,7 +354,15 @@ export default function ShipmentBidsPage({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push('/shipment')}
+            onClick={() => {
+              const returnTo = searchParams?.get('returnTo');
+              const shipperId = searchParams?.get('shipperId');
+              if (returnTo === 'shippers' && shipperId) {
+                router.push(`/shippers?profile=${shipperId}&view=shipments`);
+              } else {
+                router.push('/shipment');
+              }
+            }}
             className="h-9 w-9 p-0 rounded-lg"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -363,7 +382,7 @@ export default function ShipmentBidsPage({
               <div>
                 <p className="text-xs text-gray-500 uppercase mb-0.5">Route</p>
                 <p className="font-semibold text-gray-900 text-sm">
-                  {load.origin.city} → {load.destination.city}
+                  {load.origin.city}, {load.origin.state} → {load.destination.city}, {load.destination.state}
                 </p>
               </div>
               <div>
@@ -372,7 +391,7 @@ export default function ShipmentBidsPage({
               </div>
               <div>
                 <p className="text-xs text-gray-500 uppercase mb-0.5">Quantity</p>
-                <p className="font-semibold text-gray-900 text-sm">{(load.cargo.weight / 1000).toFixed(1)} T</p>
+                <p className="font-semibold text-gray-900 text-sm">{(load.cargo.weight / 1000).toFixed(0)} (Tonnes)</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -446,8 +465,8 @@ export default function ShipmentBidsPage({
                   <div className="space-y-3 mb-4">
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <p className="text-xs text-gray-500 uppercase mb-1">Trucker ID</p>
-                        <p className="font-semibold text-gray-900">{bid.truckerId}</p>
+                        <p className="text-xs text-indigo-700 uppercase mb-1 tracking-wide">Trucker ID</p>
+                        <p className="font-semibold text-gray-900 uppercase">{bid.truckerUniqueId}</p>
                       </div>
                       <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                         <p className="text-xs text-gray-500 uppercase mb-1">Truck Number</p>

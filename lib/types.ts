@@ -119,6 +119,7 @@ export interface Shipper {
   reliabilityScore: number;
   rating: number;
   activeLoadsCount: number;
+  totalBids: number;
   totalRatings: number;
   profileImage: string | null;
   // New API fields

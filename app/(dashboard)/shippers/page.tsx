@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { formatCurrency, formatDateTime, formatDate } from "@/lib/utils";
 import { API_ENDPOINTS, BASE_URL } from "@/config/page";
 import apiClient from "@/lib/api/client";
 import { Shipper } from "@/lib/types";
+import SearchModal from "@/components/search/search-modal";
 import {
   Search,
   Plus,
@@ -41,6 +42,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Building2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -58,6 +60,11 @@ interface ApiShipper {
   company_registration_type: string | null;
   years_in_business: string | null;
   pincode: string | null;
+  city: string | null;
+  state: string | null;
+  states: string | null;
+  state_id: string | null;
+  state_name: string | null;
   no_second_poc: boolean;
   name_poc: string | null;
   phone_poc: string | null;
@@ -75,6 +82,7 @@ interface ApiShipper {
   kyc_verified: string;
   status: string;
   load_count: string;
+  total_bids: string;
   total_ratings: string;
   average_rating: number;
 }
@@ -85,11 +93,14 @@ interface ApiShipperLoad {
   origin_location: string;
   destination_location: string;
   material: string;
+  material_name?: string;
   price: string;
   pickup_date: string | null;
   load_time: string | null;
   status: string;
   load_qty: string;
+  bid_count?: number;
+  total_bids?: number;
 }
 
 interface ApiLoadDetail {
@@ -131,6 +142,7 @@ export default function ShippersPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [shippers, setShippers] = useState<Shipper[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [selectedShipper, setSelectedShipper] = useState<Shipper | null>(null);
   const [selectedLoad, setSelectedLoad] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -140,9 +152,11 @@ export default function ShippersPage() {
   const [hoveredDoc, setHoveredDoc] = useState<string | null>(null);
   const [displayMode, setDisplayMode] = useState<"grid" | "list">("list");
   const [showFilters, setShowFilters] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive" | "pending">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
+  const [shipmentsPage, setShipmentsPage] = useState(1);
+  const shipmentsPerPage = 10;
 
   const [counterDialogOpen, setCounterDialogOpen] = useState<string | null>(null);
   const [counterAmount, setCounterAmount] = useState("");
@@ -168,6 +182,37 @@ export default function ShippersPage() {
   const [updateStatusLoading, setUpdateStatusLoading] = useState(false);
   const [updateStatusError, setUpdateStatusError] = useState<string | null>(null);
   const [updateStatusSuccess, setUpdateStatusSuccess] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+
+  // Helper function to format price
+  const formatPrice = (price: string | number) => {
+    if (!mounted) return '...';
+    const num = typeof price === 'string' ? parseFloat(price) : price;
+    return num.toLocaleString('en-IN');
+  };
+
+  // Set mounted state for client-side only rendering
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setShowFilters(false);
+      }
+    };
+
+    if (showFilters) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFilters]);
 
   useEffect(() => {
     const fetchShippers = async () => {
@@ -182,18 +227,34 @@ export default function ShippersPage() {
 
         const apiShippers: ApiShipper[] = shippersList;
 
-        const mappedShippers: Shipper[] = apiShippers.map((s) => ({
+        console.log('API Shippers sample:', apiShippers[0]);
+        console.log('State fields:', {
+          state: apiShippers[0]?.state,
+          states: apiShippers[0]?.states,
+          state_id: apiShippers[0]?.state_id,
+          state_name: apiShippers[0]?.state_name
+        });
+
+        const mappedShippers: Shipper[] = apiShippers.map((s) => {
+          console.log(`Mapping shipper ${s.id}:`, {
+            state_name: s.state_name,
+            state: s.state,
+            company_type: s.company_registration_type
+          });
+          return {
           id: s.id.toString(),
           shipperId: s.unique_id,
           companyName: s.company_name || s.name || "Unknown Company",
           contactPerson: s.name || "Unknown Contact",
           email: s.email || "",
           phone: s.mobile || "",
-          profileImage: s.images ? `${BASE_URL}/public/${s.images}` : null,
+          profileImage: s.images 
+            ? (s.images.startsWith('http') ? s.images : `${BASE_URL}/public/${s.images}`)
+            : null,
           address: {
             address: s.address || "",
-            city: "",
-            state: "",
+            city: s.city || "",
+            state: s.state_name || s.state || "N/A",
             zipCode: s.pincode || "",
           },
           paymentTerms: "Net 30",
@@ -202,8 +263,9 @@ export default function ShippersPage() {
           reliabilityScore: 0,
           rating: Number(s.average_rating) || 0,
           activeLoadsCount: parseInt(s.load_count) || 0,
+          totalBids: parseInt(s.total_bids) || 0,
           totalRatings: parseInt(s.total_ratings) || 0,
-          companyRegistrationType: s.company_registration_type || null,
+          companyRegistrationType: s.company_registration_type || "N/A",
           yearsInBusiness: s.years_in_business || null,
           pincode: s.pincode || null,
           noSecondPoc: s.no_second_poc ?? true,
@@ -221,7 +283,10 @@ export default function ShippersPage() {
           profileUpdatedAt: s.profile_updated_at || null,
           kycVerified: s.kyc_verified || "0",
           status: s.status || "Inactive",
-        }));
+        };
+        });
+
+        console.log('Mapped Shippers sample:', mappedShippers[0]);
 
         setShippers(mappedShippers);
 
@@ -252,14 +317,21 @@ export default function ShippersPage() {
   // Check for profile query parameter and auto-open profile
   useEffect(() => {
     const profileId = searchParams.get('profile');
+    const view = searchParams.get('view');
     console.log('Profile ID from URL:', profileId);
+    console.log('View from URL:', view);
     console.log('Shippers loaded:', shippers.length);
     if (profileId && shippers.length > 0) {
       const shipper = shippers.find(s => s.id === profileId);
       console.log('Found shipper:', shipper);
       if (shipper) {
-        console.log('Opening profile for shipper:', shipper.companyName);
-        handleViewProfile(shipper);
+        if (view === 'shipments') {
+          console.log('Opening shipments for shipper:', shipper.companyName);
+          handleViewShipments(shipper);
+        } else {
+          console.log('Opening profile for shipper:', shipper.companyName);
+          handleViewProfile(shipper);
+        }
       }
     }
   }, [searchParams, shippers]);
@@ -305,7 +377,8 @@ export default function ShippersPage() {
     (shipper) => {
       const matchesFilter = filterStatus === "all" ||
         (filterStatus === "active" && shipper.status.toLowerCase() === "active") ||
-        (filterStatus === "inactive" && shipper.status.toLowerCase() !== "active");
+        (filterStatus === "inactive" && shipper.status.toLowerCase() !== "active" && !["pending", "pending approval"].includes(shipper.status.toLowerCase())) ||
+        (filterStatus === "pending" && ["pending", "pending approval"].includes(shipper.status.toLowerCase()));
 
       return matchesFilter;
     }
@@ -371,11 +444,13 @@ export default function ShippersPage() {
           contactPerson: fullData.name,
           email: fullData.email || "",
           phone: fullData.mobile,
-          profileImage: fullData.images ? `${BASE_URL}/public/${fullData.images}` : null,
+          profileImage: fullData.images 
+            ? (fullData.images.startsWith('http') ? fullData.images : `${BASE_URL}/public/${fullData.images}`)
+            : null,
           address: {
             address: fullData.address || "",
-            city: "",
-            state: "",
+            city: fullData.city || "",
+            state: fullData.state_name || "",
             zipCode: fullData.pincode || "",
           },
           paymentTerms: "Net 30",
@@ -384,6 +459,7 @@ export default function ShippersPage() {
           reliabilityScore: 0,
           rating: Number(fullData.average_rating) || 0,
           activeLoadsCount: parseInt(fullData.load_count) || 0,
+          totalBids: parseInt(fullData.total_bids) || 0,
           totalRatings: parseInt(fullData.total_ratings) || 0,
           companyRegistrationType: fullData.company_registration_type || null,
           yearsInBusiness: fullData.years_in_business || null,
@@ -405,6 +481,8 @@ export default function ShippersPage() {
           status: fullData.status || "Inactive",
         };
         setSelectedShipper(enrichedShipper);
+        // Update form state with actual shipper data
+        setKycVerified(parseInt(fullData.kyc_verified) || 0);
       }
     } catch (error) {
       console.error("Failed to fetch full shipper details:", error);
@@ -429,6 +507,14 @@ export default function ShippersPage() {
         API_ENDPOINTS.dashboard.shipperUpdateStatus(selectedShipper.id),
         payload
       );
+      
+      // Update local shipper state
+      setSelectedShipper({
+        ...selectedShipper,
+        kycVerified: kycVerified.toString(),
+        status: kycVerified === 1 ? "Active" : selectedShipper.status,
+      });
+      
       setUpdateStatusSuccess(true);
       // Auto-hide success after 5 seconds
       setTimeout(() => setUpdateStatusSuccess(false), 5000);
@@ -445,6 +531,7 @@ export default function ShippersPage() {
   const handleViewShipments = async (shipper: any) => {
     setSelectedShipper(shipper);
     setViewMode("shipments");
+    setShipmentsPage(1); // Reset to first page
     setShipperLoadsLoading(true);
     setShipperLoadsError(null);
     setShipperApiLoads([]);
@@ -480,38 +567,13 @@ export default function ShippersPage() {
   };
 
   const handleViewLoadDetail = async (load: any) => {
-    setSelectedLoad(load);
-    setViewMode("load-detail");
-    setLoadDetailLoading(true);
-    setLoadDetailError(null);
-    setLoadDetail(null);
-    try {
-      const shipperId = selectedShipper?.id;
-      const loadId = load.id;
-      if (!shipperId || !loadId) {
-        setLoadDetailError("Missing shipper or load ID");
-        return;
-      }
-      const response = await apiClient.get<any>(API_ENDPOINTS.dashboard.shipperLoadDetail(shipperId, loadId));
-      const data = response.data;
-      if (data.load_details) {
-        setLoadDetail(data.load_details);
-      } else if (data.id) {
-        setLoadDetail(data);
-      } else {
-        setLoadDetailError("Load details not found");
-      }
-    } catch (err: any) {
-      console.error("Failed to fetch load details:", err);
-      setLoadDetailError(err?.response?.data?.message || "Failed to fetch load details");
-    } finally {
-      setLoadDetailLoading(false);
-    }
+    // Navigate to the shipment detail page
+    router.push(`/shipment/${load.id}`);
   };
 
   const handleViewBids = (load: any) => {
-    // Navigate to the bids page for this load
-    router.push(`/shipment/${load.id}/bids`);
+    // Navigate to the bids page for this load with shipper context
+    router.push(`/shipment/${load.id}/bids?returnTo=shippers&shipperId=${selectedShipper?.id}`);
   };
 
   const handleBackToGrid = () => {
@@ -533,6 +595,7 @@ export default function ShippersPage() {
   }
 
   return (
+    <>
     <AnimatePresence mode="wait">
       {viewMode === "grid" && (
         <motion.div
@@ -672,7 +735,7 @@ export default function ShippersPage() {
             </div>
 
             {/* Filter Button */}
-            <div className="relative">
+            <div className="relative" ref={filterRef}>
               <Button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`h-12 px-6 rounded-xl shadow-sm ${showFilters
@@ -711,7 +774,7 @@ export default function ShippersPage() {
                         : "text-gray-700 hover:bg-gray-50"
                         }`}
                     >
-                      Active Only
+                      Active
                     </button>
                     <button
                       onClick={() => setFilterStatus("inactive")}
@@ -720,8 +783,16 @@ export default function ShippersPage() {
                         : "text-gray-700 hover:bg-gray-50"
                         }`}
                     >
-                      Inactive Only
+                      Inactive
                     </button>
+                    <button
+                      onClick={() => setFilterStatus("pending")}
+                      className={`w-full text-left px-4 py-2.5 rounded-lg transition-all ${filterStatus === "pending"
+                        ? "bg-amber-50 text-amber-700 font-semibold"
+                        : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                    >
+                      Pending                    </button>
                   </div>
                 </motion.div>
               )}
@@ -752,23 +823,31 @@ export default function ShippersPage() {
                 transition={{ duration: 0.3, delay: index * 0.05 }}
               >
                 {displayMode === "grid" ? (
-                  <Card className="group hover:shadow-xl transition-all duration-300 border border-gray-100 bg-white rounded-2xl overflow-hidden">
-                    <CardContent className="p-0" suppressHydrationWarning>
+                  <Card className="group hover:shadow-xl transition-all duration-300 border border-gray-100 bg-white rounded-2xl overflow-hidden h-full flex flex-col min-h-[320px]">
+                    <CardContent className="p-0 flex flex-col h-full" suppressHydrationWarning>
                       {/* Header with subtle gradient background */}
                       <div className="bg-gradient-to-br from-slate-50 to-gray-50 p-6 border-b border-gray-100">
-                        <div className="flex items-start gap-4 mb-4">
+                        <div className="flex items-start gap-4">
                           <motion.button
                             layoutId={`profile-icon-${shipper.id}`}
                             onClick={() => router.push(`/shippers/${shipper.id}`)}
-                            className="h-14 w-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer shadow-md"
+                            className="h-16 w-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer shadow-md overflow-hidden"
                           >
-                            <User className="h-7 w-7 text-white" />
+                            {shipper.profileImage ? (
+                              <img 
+                                src={shipper.profileImage}
+                                alt={shipper.companyName}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <User className="h-8 w-8 text-white" />
+                            )}
                           </motion.button>
-                          <div className="flex-1">
-                            <h3 className="font-bold text-gray-700 text-lg mb-1">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-gray-800 text-lg mb-2 truncate">
                               {shipper.companyName}
                             </h3>
-                            <p className="text-xs text-gray-500 font-medium">
+                            <p className="text-sm text-gray-500 font-medium truncate mb-3">
                               {shipper.shipperId}
                             </p>
                             <Badge 
@@ -777,73 +856,70 @@ export default function ShippersPage() {
                                 shipper.status.toLowerCase() === "pending" ? "pending" : 
                                 "cancelled"
                               }
-                              className="mt-2"
+                              className="text-xs px-3 py-1"
                             >
                               {shipper.status}
                             </Badge>
                           </div>
                         </div>
+                      </div>
 
-                        {/* Email */}
-                        <div className="flex items-center gap-2 text-sm text-gray-600 bg-white px-3 py-2 rounded-lg">
-                          <Mail className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                          <span className="truncate">{shipper.email}</span>
+                      {/* Company Type and State Box */}
+                      <div className="px-6 py-4 border-b border-gray-100">
+                        <div className="grid grid-cols-2 gap-3">
+                          {shipper.companyRegistrationType && (
+                            <div className="bg-blue-50/30 border border-blue-100 rounded-xl p-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5 mb-2">
+                                <Building2 className="h-4 w-4 text-blue-500" />
+                                <span className="text-xs text-blue-500 font-semibold uppercase tracking-wide">Company Type</span>
+                              </div>
+                              <p className="text-lg font-bold text-gray-700">{shipper.companyRegistrationType}</p>
+                            </div>
+                          )}
+                          {shipper.address?.state && (
+                            <div className="bg-orange-50/30 border border-orange-100 rounded-xl p-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5 mb-2">
+                                <MapPin className="h-4 w-4 text-orange-500" />
+                                <span className="text-xs text-orange-500 font-semibold uppercase tracking-wide">State</span>
+                              </div>
+                              <p className="text-lg font-bold text-gray-700">{shipper.address.state}</p>
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      {/* Stats Section */}
-                      <div className="p-6">
-                        <div className="grid grid-cols-2 gap-4 mb-5">
-                          <div className="text-center p-4 rounded-xl bg-blue-50/50 border border-blue-100/50">
-                            <div className="flex items-center justify-center gap-2 mb-2">
-                              <Package className="h-4 w-4 text-blue-600" />
-                              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
-                                Loads
-                              </p>
-                            </div>
-                            <p className="text-2xl font-bold text-gray-700">
-                              {shipper.activeLoadsCount}
-                            </p>
-                          </div>
-                          <div className="text-center p-4 rounded-xl bg-amber-50/50 border border-amber-100/50">
-                            <div className="flex items-center justify-center gap-2 mb-2">
-                              <Star className="h-4 w-4 text-amber-600" />
-                              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">
-                                Rating
-                              </p>
-                            </div>
-                            <p className="text-2xl font-bold text-gray-700">
-                              {shipper.rating}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2">
+                      {/* Action Buttons */}
+                      <div className="p-5 mt-auto">
+                        <div className="grid grid-cols-2 gap-3">
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1 border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300"
+                            className="w-full border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 text-sm h-11"
                             onClick={() => handleViewProfile(shipper)}
                           >
                             <Eye className="mr-1.5 h-4 w-4" />
-                            View
+                            Profile
                           </Button>
                           <Button
                             size="sm"
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm h-11"
                             onClick={() => handleViewShipments(shipper)}
                           >
                             <Package className="mr-1.5 h-4 w-4" />
-                            Shipments
+                            Loads ({shipper.activeLoadsCount})
                           </Button>
                           <Button
                             size="sm"
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm h-11"
+                            onClick={() => window.open(`tel:${shipper.phone}`, '_self')}
                           >
                             <Phone className="mr-1.5 h-4 w-4" />
                             Call
                           </Button>
+                          <div className="w-full bg-purple-100 border border-purple-200 rounded-lg px-4 py-2.5 text-center h-11 flex items-center justify-center">
+                            <FileText className="mr-1.5 h-4 w-4 text-purple-600" />
+                            <span className="text-sm font-bold text-purple-700">Bids: {shipper.totalBids || 0}</span>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -856,9 +932,17 @@ export default function ShippersPage() {
                         <motion.button
                           layoutId={`profile-icon-${shipper.id}`}
                           onClick={() => router.push(`/shippers/${shipper.id}`)}
-                          className="h-14 w-14 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0 cursor-pointer transition-all"
+                          className="h-14 w-14 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0 cursor-pointer transition-all overflow-hidden"
                         >
-                          <User className="h-6 w-6 text-slate-600" />
+                          {shipper.profileImage ? (
+                            <img 
+                              src={shipper.profileImage}
+                              alt={shipper.companyName}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <User className="h-6 w-6 text-slate-600" />
+                          )}
                         </motion.button>
 
                         {/* Company Info */}
@@ -880,36 +964,26 @@ export default function ShippersPage() {
                           </Badge>
                         </div>
 
-                        {/* Stats */}
-                        <div className="flex w-full lg:w-auto justify-between lg:justify-start gap-4 lg:gap-8">
-                          <div className="text-center">
-                            <div className="flex items-center justify-center gap-1.5 mb-1">
-                              <Package className="h-3.5 w-3.5 text-blue-600" />
-                              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
-                                Loads
-                              </p>
+                        {/* Company Type and State - Left Side */}
+                        <div className="flex gap-6 mr-8 flex-shrink-0">
+                          {shipper.address?.state && (
+                            <div className="flex flex-col gap-1 w-32">
+                              <div className="flex items-center gap-1.5">
+                                <MapPin className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                                <span className="text-xs text-gray-500 font-medium">State</span>
+                              </div>
+                              <span className="text-sm text-gray-800 font-semibold pl-5 truncate" title={shipper.address.state}>{shipper.address.state}</span>
                             </div>
-                            <p className="text-xl font-bold text-gray-700">
-                              {shipper.activeLoadsCount}
-                            </p>
-                          </div>
-                          <div className="text-center">
-                            <div className="flex items-center justify-center gap-1.5 mb-1">
-                              <Star className="h-3.5 w-3.5 text-amber-600" />
-                              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">
-                                Rating
-                              </p>
+                          )}
+                          {shipper.companyRegistrationType && (
+                            <div className="flex flex-col gap-1 w-40">
+                              <div className="flex items-center gap-1.5">
+                                <Building2 className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+                                <span className="text-xs text-gray-500 font-medium">Company Type</span>
+                              </div>
+                              <span className="text-sm text-gray-800 font-semibold pl-5 truncate" title={shipper.companyRegistrationType}>{shipper.companyRegistrationType}</span>
                             </div>
-                            <p className="text-xl font-bold text-gray-700">
-                              {shipper.rating}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Contact */}
-                        <div className="flex items-center gap-2 text-sm text-gray-600 min-w-[220px] bg-gray-50 px-4 py-2.5 rounded-lg">
-                          <Mail className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                          <span className="truncate">{shipper.email}</span>
+                          )}
                         </div>
 
                         {/* Action Buttons */}
@@ -921,7 +995,7 @@ export default function ShippersPage() {
                             onClick={() => handleViewProfile(shipper)}
                           >
                             <Eye className="mr-1.5 h-4 w-4" />
-                            View
+                            View Profile
                           </Button>
                           <Button
                             size="sm"
@@ -929,15 +1003,22 @@ export default function ShippersPage() {
                             onClick={() => handleViewShipments(shipper)}
                           >
                             <Package className="mr-1.5 h-4 w-4" />
-                            Shipments
+                            Shipments ({shipper.activeLoadsCount})
                           </Button>
                           <Button
                             size="sm"
                             className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            onClick={() => window.open(`tel:${shipper.phone}`, '_self')}
                           >
                             <Phone className="mr-1.5 h-4 w-4" />
                             Call
                           </Button>
+                          <div className="bg-purple-100 border border-purple-200 rounded-lg px-3 py-2 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <FileText className="h-4 w-4 text-purple-600" />
+                              <span className="text-sm font-bold text-purple-700">Bids: {shipper.totalBids || 0}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -1019,9 +1100,9 @@ export default function ShippersPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, delay: 0.2 }}
           >
-            <Button variant="outline" onClick={handleBackToGrid}>
+            <Button variant="outline" onClick={() => router.back()}>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Shippers
+              Back
             </Button>
           </motion.div>
 
@@ -1054,29 +1135,35 @@ export default function ShippersPage() {
                     <h1 className="text-2xl font-bold text-gray-700">
                       {selectedShipper.companyName}
                     </h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {selectedShipper.shipperId}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-sm text-gray-500">
+                        {selectedShipper.shipperId}
+                      </p>
+                      <Badge 
+                        variant={
+                          selectedShipper.status.toLowerCase() === "active" ? "confirmed" : 
+                          selectedShipper.status.toLowerCase() === "pending" ? "pending" : 
+                          "cancelled"
+                        }
+                        className="text-xs px-3 py-1"
+                      >
+                        {selectedShipper.status}
+                      </Badge>
+                    </div>
                     <p className="text-gray-600 mt-1">
                       {selectedShipper.contactPerson}
                     </p>
                     <div className="flex items-center gap-2 mt-2">
                       <Mail className="h-4 w-4 text-gray-400" />
-                      <a
-                        href={`mailto:${selectedShipper.email}`}
-                        className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                      >
-                        {selectedShipper.email}
-                      </a>
+                      <span className="text-sm text-gray-600 font-medium">
+                        {selectedShipper.email.replace(/(.{2})(.*)(@.*)/, '$1****$3')}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <Phone className="h-4 w-4 text-gray-400" />
-                      <a
-                        href={`tel:${selectedShipper.phone}`}
-                        className="text-sm text-gray-600 hover:text-gray-700 font-medium"
-                      >
-                        {selectedShipper.phone}
-                      </a>
+                      <span className="text-sm text-gray-600 font-medium">
+                        {selectedShipper.phone.replace(/(\d{2})(\d{4})(\d{4})/, '$1****$3')}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1122,13 +1209,6 @@ export default function ShippersPage() {
 
                 {/* Action Buttons */}
                 <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-all"
-                  >
-                    <Mail className="mr-2 h-4 w-4" />
-                    Send Email
-                  </Button>
                   <Button
                     variant="outline"
                     className="hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-all"
@@ -1529,7 +1609,7 @@ export default function ShippersPage() {
                             </p>
                             <p className="text-xs text-gray-600 mt-1 flex items-center gap-1">
                               <Phone className="h-3 w-3" />
-                              {selectedShipper.phone}
+                              {selectedShipper.phone.replace(/(\d{2})(\d{4})(\d{4})/, '$1****$3')}
                             </p>
                           </div>
                         </div>
@@ -1548,7 +1628,7 @@ export default function ShippersPage() {
                                 {selectedShipper.phonePoc && (
                                   <p className="text-xs text-gray-600 mt-1 flex items-center gap-1">
                                     <Phone className="h-3 w-3" />
-                                    {selectedShipper.phonePoc}
+                                    {selectedShipper.phonePoc.replace(/(\d{2})(\d{4})(\d{4})/, '$1****$3')}
                                   </p>
                                 )}
                               </>
@@ -1770,9 +1850,9 @@ export default function ShippersPage() {
           className="space-y-6"
         >
           {/* Back Button */}
-          <Button variant="outline" onClick={handleBackToGrid}>
+          <Button variant="outline" onClick={() => router.back()}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Shippers
+            Back
           </Button>
 
           {/* Header */}
@@ -1788,7 +1868,9 @@ export default function ShippersPage() {
                     <h1 className="text-2xl font-bold text-gray-700">
                       {selectedShipper.companyName}
                     </h1>
-                    <p className="text-gray-600 mt-1">All Shipments</p>
+                    <p className="text-gray-600 mt-1">
+                      All Shipments ({shipperApiLoads.length} {shipperApiLoads.length === 1 ? 'Load' : 'Loads'})
+                    </p>
                   </div>
                   <Button
                     variant="outline"
@@ -1819,7 +1901,15 @@ export default function ShippersPage() {
                 </CardContent>
               </Card>
             ) : shipperApiLoads.length > 0 ? (
-              shipperApiLoads.map((load, index) => {
+              (() => {
+                const totalShipmentsPages = Math.ceil(shipperApiLoads.length / shipmentsPerPage);
+                const startIdx = (shipmentsPage - 1) * shipmentsPerPage;
+                const endIdx = startIdx + shipmentsPerPage;
+                const paginatedLoads = shipperApiLoads.slice(startIdx, endIdx);
+                
+                return (
+                  <>
+                    {paginatedLoads.map((load, index) => {
                 const getLoadStatusBadgeClass = (status: string) => {
                   switch (status) {
                     case "open-load": return "bg-blue-100 text-blue-700 border-blue-200";
@@ -1867,7 +1957,7 @@ export default function ShippersPage() {
                               Price
                             </p>
                             <p className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mt-1">
-                              ₹{parseFloat(load.price).toLocaleString("en-IN")}
+                              ₹{formatPrice(load.price)}
                             </p>
                           </div>
                         </div>
@@ -1911,7 +2001,7 @@ export default function ShippersPage() {
                               </div>
                               <p className="text-xs font-medium text-gray-500">Material</p>
                             </div>
-                            <p className="text-sm font-bold text-gray-700">{load.material}</p>
+                            <p className="text-sm font-bold text-gray-700">{load.material_name || load.material || "N/A"}</p>
                           </div>
                           <div className="bg-orange-50 border border-orange-100 p-3 rounded-lg">
                             <div className="flex items-center gap-2 mb-1">
@@ -1922,7 +2012,7 @@ export default function ShippersPage() {
                               </div>
                               <p className="text-xs font-medium text-gray-500">Quantity</p>
                             </div>
-                            <p className="text-sm font-bold text-gray-700">{load.load_qty}</p>
+                            <p className="text-sm font-bold text-gray-700">{load.load_qty} (Tonnes)</p>
                           </div>
                           <div className="bg-green-50 border border-green-100 p-3 rounded-lg">
                             <div className="flex items-center gap-2 mb-1">
@@ -1957,12 +2047,22 @@ export default function ShippersPage() {
                             <p className="text-sm font-bold text-gray-700">
                               {load.load_time
                                 ? (() => {
+                                    // Check if it's just time format (HH:MM:SS)
+                                    if (load.load_time.includes(':') && !load.load_time.includes('T')) {
+                                      const [hours24, minutes] = load.load_time.split(':');
+                                      let hours = parseInt(hours24);
+                                      const ampm = hours >= 12 ? 'pm' : 'am';
+                                      hours = hours % 12;
+                                      hours = hours ? hours : 12;
+                                      return `${hours}:${minutes} ${ampm}`;
+                                    }
+                                    // Otherwise parse as date
                                     const date = new Date(load.load_time);
                                     let hours = date.getUTCHours();
                                     const minutes = date.getUTCMinutes();
                                     const ampm = hours >= 12 ? 'pm' : 'am';
                                     hours = hours % 12;
-                                    hours = hours ? hours : 12; // 0 should be 12
+                                    hours = hours ? hours : 12;
                                     const minutesStr = minutes < 10 ? '0' + minutes : minutes;
                                     return `${hours}:${minutesStr} ${ampm}`;
                                   })()
@@ -1989,7 +2089,7 @@ export default function ShippersPage() {
                             onClick={() => handleViewBids(load)}
                           >
                             <TrendingUp className="mr-2 h-4 w-4" />
-                            View Bids
+                            View Bids ({load.total_bids || load.bid_count || 0})
                           </Button>
                           <Button
                             size="sm"
@@ -2008,7 +2108,65 @@ export default function ShippersPage() {
                     </Card>
                   </motion.div>
                 );
-              })
+              })}
+              
+              {/* Pagination */}
+              {totalShipmentsPages > 1 && (
+                <div className="flex items-center justify-between border-t border-gray-100 pt-6 mt-6">
+                  <div className="text-sm text-gray-600">
+                    Showing <span className="font-semibold text-gray-800">{startIdx + 1}</span> to <span className="font-semibold text-gray-800">{Math.min(endIdx, shipperApiLoads.length)}</span> of <span className="font-semibold text-gray-800">{shipperApiLoads.length}</span> loads
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShipmentsPage(1)}
+                      disabled={shipmentsPage === 1}
+                      className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 border border-gray-100"
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShipmentsPage(p => Math.max(1, p - 1))}
+                      disabled={shipmentsPage === 1}
+                      className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 border border-gray-100"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+
+                    <div className="text-sm font-medium text-gray-500 px-4">
+                      Page <span className="text-gray-900">{shipmentsPage}</span> of <span className="text-gray-900">{totalShipmentsPages}</span>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShipmentsPage(p => Math.min(totalShipmentsPages, p + 1))}
+                      disabled={shipmentsPage === totalShipmentsPages}
+                      className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 border border-gray-100"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShipmentsPage(totalShipmentsPages)}
+                      disabled={shipmentsPage === totalShipmentsPages}
+                      className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 border border-gray-100"
+                    >
+                      <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+                );
+              })()
             ) : (
               <Card>
                 <CardContent className="p-12 text-center">
@@ -2033,9 +2191,9 @@ export default function ShippersPage() {
           className="space-y-6"
         >
           {/* Back Button */}
-          <Button variant="outline" onClick={handleBackToShipments}>
+          <Button variant="outline" onClick={() => router.back()}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Shipments
+            Back
           </Button>
 
           {loadDetailLoading ? (
@@ -2449,9 +2607,9 @@ export default function ShippersPage() {
           className="space-y-6"
         >
           <div className="flex items-center justify-between mb-6">
-            <Button variant="outline" onClick={handleBackToShipments}>
+            <Button variant="outline" onClick={() => router.back()}>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Shipments
+              Back
             </Button>
             <div className="text-sm text-gray-600">
               {loadBids.length} {loadBids.length === 1 ? "bid" : "bids"}{" "}
@@ -2763,5 +2921,12 @@ export default function ShippersPage() {
         </motion.div>
       )}
     </AnimatePresence>
+    
+    {/* Search Modal */}
+    <SearchModal
+      isOpen={searchModalOpen}
+      onClose={() => setSearchModalOpen(false)}
+    />
+    </>
   );
 }

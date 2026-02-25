@@ -13,9 +13,7 @@ import {
   Truck,
   Calendar,
   Clock,
-  FileText,
   DollarSign,
-  Sparkles,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import apiClient from "@/lib/api/client";
@@ -48,6 +46,33 @@ interface LoadDetailFull {
   shipper_name?: string;
 }
 
+// Helper function to format date consistently
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  const day = date.getDate().toString().padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day} ${month} ${year}`;
+};
+
+// Helper function to format time consistently
+const formatTime = (dateString: string) => {
+  const date = new Date(dateString);
+  let hours = date.getHours();
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+};
+
+// Helper function to format price consistently (Indian format with commas)
+const formatPrice = (price: string | number) => {
+  const num = typeof price === 'string' ? parseFloat(price) : price;
+  return num.toLocaleString('en-IN');
+};
+
 export default function ShipmentDetailPage({
   params,
 }: {
@@ -58,6 +83,11 @@ export default function ShipmentDetailPage({
   const [load, setLoad] = useState<LoadDetailFull | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const fetchLoadDetail = async () => {
@@ -119,8 +149,8 @@ export default function ShipmentDetailPage({
           <p className="text-gray-600 mb-4">
             {error || "The load you're looking for doesn't exist."}
           </p>
-          <Button onClick={() => router.push("/shipment")} className="bg-blue-600 hover:bg-blue-700">
-            Back to Shipments
+          <Button onClick={() => router.back()} className="bg-blue-600 hover:bg-blue-700">
+            Back
           </Button>
         </Card>
       </div>
@@ -156,39 +186,45 @@ export default function ShipmentDetailPage({
           className="text-gray-600 hover:text-gray-900"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Shipments
+          Back
         </Button>
       </motion.div>
 
-      {/* Purple Header Card */}
+      {/* Header Card */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <Card className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-0 shadow-lg overflow-hidden">
+        <Card className="border-gray-200 shadow-sm">
           <div className="p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
-                <div className="h-14 w-14 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                <div className="h-14 w-14 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
                   <Package className="h-7 w-7 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-3xl font-bold mb-1">{load.load_id}</h1>
-                  <p className="text-purple-100 text-sm">
+                  <h1 className="text-3xl font-bold text-gray-900 mb-1">{load.load_id}</h1>
+                  <p className="text-gray-600 text-sm">
                     {load.shipper_name || "Shipper"}
                   </p>
-                  <p className="text-purple-200 text-xs mt-1">
-                    Shipper ID: {load.user_id}
-                  </p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <p className="text-gray-500 text-xs">
+                      {load.user_id}
+                    </p>
+                    <span className="text-gray-300">•</span>
+                    <p className="text-gray-500 text-xs">
+                      {mounted ? `${formatDate(load.created_at)}, ${formatTime(load.created_at)}` : 'Loading...'}
+                    </p>
+                  </div>
                 </div>
               </div>
               <div className="text-right">
                 <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(load.status)} text-white mb-2`}>
                   {load.status}
                 </span>
-                <p className="text-4xl font-bold">₹{parseFloat(load.price).toLocaleString('en-IN')}</p>
-                <p className="text-purple-200 text-xs uppercase tracking-wider">PRICE</p>
+                <p className="text-4xl font-bold text-gray-900">₹{mounted ? formatPrice(load.price) : '...'}</p>
+                <p className="text-gray-500 text-xs uppercase tracking-wider">PRICE</p>
               </div>
             </div>
           </div>
@@ -201,48 +237,42 @@ export default function ShipmentDetailPage({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
       >
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className="border-gray-200">
           <div className="p-5">
             <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                <MapPin className="h-4 w-4 text-white" />
-              </div>
+              <MapPin className="h-5 w-5 text-blue-600" />
               Route Information
             </h3>
             <div className="grid md:grid-cols-2 gap-4">
               {/* Pickup */}
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="h-8 w-8 rounded-lg bg-green-600 flex items-center justify-center">
-                    <MapPin className="h-4 w-4 text-white" />
-                  </div>
-                  <span className="text-sm font-bold text-green-700 uppercase">Pickup</span>
+                  <MapPin className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-bold text-gray-700 uppercase">Pickup</span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900 mb-2">
                   {load.origin_location || load.exact_origin_location}
                 </p>
                 {load.exact_origin_location && load.exact_origin_location !== load.origin_location && (
                   <div className="mt-2 pt-2 border-t border-green-200">
-                    <p className="text-xs text-green-700 font-medium mb-1">EXACT:</p>
+                    <p className="text-xs text-gray-500 font-medium mb-1">EXACT:</p>
                     <p className="text-xs text-gray-700">{load.exact_origin_location}</p>
                   </div>
                 )}
               </div>
 
               {/* Drop */}
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="h-8 w-8 rounded-lg bg-red-600 flex items-center justify-center">
-                    <MapPin className="h-4 w-4 text-white" />
-                  </div>
-                  <span className="text-sm font-bold text-red-700 uppercase">Drop</span>
+                  <MapPin className="h-4 w-4 text-red-600" />
+                  <span className="text-sm font-bold text-gray-700 uppercase">Drop</span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900 mb-2">
                   {load.destination_location || load.exact_destination_location}
                 </p>
                 {load.exact_destination_location && load.exact_destination_location !== load.destination_location && (
                   <div className="mt-2 pt-2 border-t border-red-200">
-                    <p className="text-xs text-red-700 font-medium mb-1">EXACT:</p>
+                    <p className="text-xs text-gray-500 font-medium mb-1">EXACT:</p>
                     <p className="text-xs text-gray-700">{load.exact_destination_location}</p>
                   </div>
                 )}
@@ -259,13 +289,11 @@ export default function ShipmentDetailPage({
         transition={{ delay: 0.2 }}
         className="grid md:grid-cols-2 gap-4"
       >
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className="bg-gray-50 border-gray-200">
           <div className="p-5">
             <div className="flex items-center gap-2 mb-3">
-              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                <Truck className="h-4 w-4 text-white" />
-              </div>
-              <span className="text-xs text-blue-700 font-bold uppercase tracking-wider">BODY TYPE</span>
+              <Truck className="h-5 w-5 text-blue-600" />
+              <span className="text-xs text-gray-600 font-bold uppercase tracking-wider">BODY TYPE</span>
             </div>
             <p className="text-xl font-bold text-gray-900">
               {load.vehicle_body || "N/A"}
@@ -273,13 +301,11 @@ export default function ShipmentDetailPage({
           </div>
         </Card>
 
-        <Card className="bg-purple-50 border-purple-200">
+        <Card className="bg-gray-50 border-gray-200">
           <div className="p-5">
             <div className="flex items-center gap-2 mb-3">
-              <div className="h-8 w-8 rounded-lg bg-purple-600 flex items-center justify-center">
-                <Truck className="h-4 w-4 text-white" />
-              </div>
-              <span className="text-xs text-purple-700 font-bold uppercase tracking-wider">VEHICLE TYPE</span>
+              <Truck className="h-5 w-5 text-blue-600" />
+              <span className="text-xs text-gray-600 font-bold uppercase tracking-wider">VEHICLE TYPE</span>
             </div>
             <p className="text-xl font-bold text-gray-900">
               {load.vehicle_type || load.container_feet ? `${load.vehicle_type || ""} ${load.container_feet || ""}`.trim() : "N/A"}
@@ -295,58 +321,45 @@ export default function ShipmentDetailPage({
         transition={{ delay: 0.25 }}
         className="grid grid-cols-2 md:grid-cols-4 gap-4"
       >
-        <Card className="bg-purple-50 border-purple-200">
+        <Card className="bg-gray-50 border-gray-200">
           <div className="p-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="h-7 w-7 rounded-lg bg-purple-600 flex items-center justify-center">
-                <Package className="h-3.5 w-3.5 text-white" />
-              </div>
-              <span className="text-xs text-purple-700 font-bold uppercase">MATERIAL</span>
+              <Package className="h-4 w-4 text-blue-600" />
+              <span className="text-xs text-gray-600 font-bold uppercase">MATERIAL</span>
             </div>
             <p className="text-base font-bold text-gray-900">{load.material || "N/A"}</p>
-            <p className="text-xs text-gray-600 mt-1">Qty: {load.load_qty || load.material_quantity || "N/A"}</p>
           </div>
         </Card>
 
-        <Card className="bg-orange-50 border-orange-200">
+        <Card className="bg-gray-50 border-gray-200">
           <div className="p-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="h-7 w-7 rounded-lg bg-orange-600 flex items-center justify-center">
-                <Package className="h-3.5 w-3.5 text-white" />
-              </div>
-              <span className="text-xs text-orange-700 font-bold uppercase">MATERIAL QTY</span>
+              <Package className="h-4 w-4 text-blue-600" />
+              <span className="text-xs text-gray-600 font-bold uppercase">MATERIAL QTY</span>
             </div>
-            <p className="text-base font-bold text-gray-900">{load.material_quantity || load.load_qty || "N/A"}</p>
+            <p className="text-base font-bold text-gray-900">{load.material_quantity || load.load_qty || "N/A"} (Tonnes)</p>
           </div>
         </Card>
 
-        <Card className="bg-green-50 border-green-200">
+        <Card className="bg-gray-50 border-gray-200">
           <div className="p-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="h-7 w-7 rounded-lg bg-green-600 flex items-center justify-center">
-                <Calendar className="h-3.5 w-3.5 text-white" />
-              </div>
-              <span className="text-xs text-green-700 font-bold uppercase">PICKUP DATE</span>
+              <Calendar className="h-4 w-4 text-blue-600" />
+              <span className="text-xs text-gray-600 font-bold uppercase">PICKUP DATE</span>
             </div>
             <p className="text-base font-bold text-gray-900">
-              {load.pickup_date 
-                ? new Date(load.pickup_date).toLocaleDateString("en-GB", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric"
-                  })
-                : "N/A"}
+              {load.pickup_date && mounted
+                ? formatDate(load.pickup_date)
+                : load.pickup_date ? "Loading..." : "N/A"}
             </p>
           </div>
         </Card>
 
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className="bg-gray-50 border-gray-200">
           <div className="p-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="h-7 w-7 rounded-lg bg-blue-600 flex items-center justify-center">
-                <Clock className="h-3.5 w-3.5 text-white" />
-              </div>
-              <span className="text-xs text-blue-700 font-bold uppercase">LOAD TIME</span>
+              <Clock className="h-4 w-4 text-blue-600" />
+              <span className="text-xs text-gray-600 font-bold uppercase">LOAD TIME</span>
             </div>
             <p className="text-base font-bold text-gray-900">
               {load.load_time ? (() => {
@@ -368,147 +381,45 @@ export default function ShipmentDetailPage({
         </Card>
       </motion.div>
 
-      {/* Additional Information */}
+      {/* Pricing Breakdown */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
       >
-        <Card className="bg-white border-gray-200">
+        <Card className="border-gray-200">
           <div className="p-5">
             <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-gray-700 flex items-center justify-center">
-                <FileText className="h-4 w-4 text-white" />
-              </div>
-              Additional Information
-            </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <Card className="bg-teal-50 border-teal-200">
-                <div className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="h-7 w-7 rounded-lg bg-teal-600 flex items-center justify-center">
-                      <FileText className="h-3.5 w-3.5 text-white" />
-                    </div>
-                    <span className="text-xs text-teal-700 font-bold uppercase">OVER DIMENSIONAL CARGO (ODC)</span>
-                  </div>
-                  <p className="text-lg font-bold text-gray-900">{load.odc || "N/A"}</p>
-                </div>
-              </Card>
-
-              <Card className="bg-purple-50 border-purple-200">
-                <div className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="h-7 w-7 rounded-lg bg-purple-600 flex items-center justify-center">
-                      <Sparkles className="h-3.5 w-3.5 text-white" />
-                    </div>
-                    <span className="text-xs text-purple-700 font-bold uppercase">SETTLED BY</span>
-                  </div>
-                  <p className="text-lg font-bold text-gray-900">{load.setteled_by || "31"}</p>
-                </div>
-              </Card>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* Pricing Breakdown */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35 }}
-      >
-        <Card className="bg-green-50 border-green-200">
-          <div className="p-5">
-            <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-green-600 flex items-center justify-center">
-                <DollarSign className="h-4 w-4 text-white" />
-              </div>
+              <DollarSign className="h-5 w-5 text-blue-600" />
               Pricing Breakdown
             </h3>
             <div className="grid md:grid-cols-3 gap-4">
-              <Card className="bg-green-100 border-green-300">
+              <Card className="bg-gray-50 border-gray-200">
                 <div className="p-4">
-                  <p className="text-xs text-green-700 font-bold uppercase mb-2">TOTAL PRICE</p>
-                  <p className="text-2xl font-bold text-green-700">
-                    ₹{parseFloat(load.price).toLocaleString('en-IN')}
+                  <p className="text-xs text-gray-600 font-bold uppercase mb-2">TOTAL PRICE</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    ₹{mounted ? formatPrice(load.price) : '...'}
                   </p>
                 </div>
               </Card>
 
-              <Card className="bg-blue-100 border-blue-300">
+              <Card className="bg-gray-50 border-gray-200">
                 <div className="p-4">
-                  <p className="text-xs text-blue-700 font-bold uppercase mb-2">ADVANCE PRICE</p>
-                  <p className="text-2xl font-bold text-blue-700">
-                    ₹{load.adv_price ? parseFloat(load.adv_price).toLocaleString('en-IN') : "0"}
+                  <p className="text-xs text-gray-600 font-bold uppercase mb-2">ADVANCE PRICE</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    ₹{mounted ? (load.adv_price ? formatPrice(load.adv_price) : "0") : '...'}
                   </p>
                 </div>
               </Card>
 
-              <Card className="bg-purple-100 border-purple-300">
+              <Card className="bg-gray-50 border-gray-200">
                 <div className="p-4">
-                  <p className="text-xs text-purple-700 font-bold uppercase mb-2">SETTLED PRICE</p>
-                  <p className="text-2xl font-bold text-purple-700">
-                    ₹{load.setteled_price ? parseFloat(load.setteled_price).toLocaleString('en-IN') : parseFloat(load.price).toLocaleString('en-IN')}
+                  <p className="text-xs text-gray-600 font-bold uppercase mb-2">SETTLED PRICE</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    ₹{mounted ? (load.setteled_price ? formatPrice(load.setteled_price) : formatPrice(load.price)) : '...'}
                   </p>
                 </div>
               </Card>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* Timeline */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-      >
-        <Card className="bg-white border-gray-200">
-          <div className="p-5">
-            <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <div className="h-1 w-1 rounded-full bg-blue-600"></div>
-              Timeline
-            </h3>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                  <Clock className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium mb-1">CREATED</p>
-                  <p className="text-sm font-bold text-gray-900">
-                    {new Date(load.created_at).toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric"
-                    })}, {new Date(load.created_at).toLocaleTimeString("en-US", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true
-                    })}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="h-5 w-5 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium mb-1">LAST UPDATED</p>
-                  <p className="text-sm font-bold text-gray-900">
-                    {new Date(load.updated_at).toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric"
-                    })}, {new Date(load.updated_at).toLocaleTimeString("en-US", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true
-                    })}
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </Card>

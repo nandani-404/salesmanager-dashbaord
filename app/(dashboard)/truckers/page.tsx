@@ -11,10 +11,11 @@ import {
   Briefcase, Globe, Landmark, LayoutDashboard, Truck
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import apiClient from "@/lib/api/client";
 import { API_ENDPOINTS, BASE_URL } from "@/config/page";
+import SearchModal from "@/components/search/search-modal";
 
 // --- API Interfaces ---
 interface Transporter {
@@ -26,9 +27,19 @@ interface Transporter {
   verified_trucker_shipper: string | null;
   total_vehicles: string;
   total_applied: string;
+  total_bids: string;
+  bid_count?: string;
+  company_type?: string | null;
+  company_type_name?: string | null;
+  state?: string | null;
+  state_name?: string | null;
 }
 
 interface TransportersResponse {
+  total_transporters: number;
+  total_active: number;
+  total_inactive: number;
+  total_pending: number;
   total_trucker: number;
   total_active_trucker: number;
   total_vehicle: number;
@@ -81,6 +92,10 @@ export default function TruckersPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive" | "pending">("all");
+  const filterRef = useRef<HTMLDivElement>(null);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   // Fetch Transporters
   useEffect(() => {
@@ -88,6 +103,8 @@ export default function TruckersPage() {
       try {
         setLoading(true);
         const response = await apiClient.get<TransportersResponse>(`${API_ENDPOINTS.dashboard.transporters}?page=${currentPage}`);
+        console.log("Transporters API Response:", response.data);
+        console.log("First transporter verified status:", response.data.transporters[0]?.verified_trucker_shipper);
         setData(response.data);
         setError(null);
       } catch (err: any) {
@@ -100,41 +117,51 @@ export default function TruckersPage() {
     fetchTransporters();
   }, [currentPage]);
 
-  // Dynamic search with debouncing (using local search only)
+  // Close filter dropdown when clicking outside
   useEffect(() => {
-    const searchUsers = () => {
-      if (!searchQuery.trim()) {
-        setSearchResults([]);
-        setSearchError(null);
-        return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setShowFilters(false);
       }
-
-      setIsSearching(true);
-      setSearchError(null);
-
-      // Use local filtering only
-      if (data) {
-        const localResults = data.transporters.filter((t) => {
-          const name = t.name || "";
-          const transportName = t.transport_name || "";
-          const uniqueId = t.unique_id || "";
-          const query = searchQuery.toLowerCase();
-          return name.toLowerCase().includes(query) ||
-                 transportName.toLowerCase().includes(query) ||
-                 uniqueId.toLowerCase().includes(query);
-        });
-        setSearchResults(localResults);
-      }
-      setSearchError(null);
-      setIsSearching(false);
     };
 
-    // Debounce search
-    const timeoutId = setTimeout(() => {
-      searchUsers();
-    }, 300);
+    if (showFilters) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFilters]);
+
+  // Dynamic search with local filtering
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setSearchError(null);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+
+    // Use local filtering only
+    if (data) {
+      const localResults = data.transporters.filter((t) => {
+        const name = t.name || "";
+        const transportName = t.transport_name || "";
+        const uniqueId = t.unique_id || "";
+        const query = searchQuery.toLowerCase();
+        return name.toLowerCase().includes(query) ||
+               transportName.toLowerCase().includes(query) ||
+               uniqueId.toLowerCase().includes(query);
+      });
+      setSearchResults(localResults);
+    } else {
+      setSearchResults([]);
+    }
+    
+    setIsSearching(false);
   }, [searchQuery, data]);
 
   // Filter and search transporters
@@ -144,8 +171,18 @@ export default function TruckersPage() {
     // Use search results if searching, otherwise use all transporters
     const sourceData = searchQuery.trim() ? searchResults : data.transporters;
     
-    return sourceData;
-  }, [searchQuery, searchResults, data]);
+    // Apply status filter
+    return sourceData.filter((trucker) => {
+      const status = trucker.verified_trucker_shipper;
+      
+      if (filterStatus === "all") return true;
+      if (filterStatus === "active") return status === "1" || status === 1;
+      if (filterStatus === "inactive") return status === "0" || status === 0;
+      if (filterStatus === "pending") return status === null || status === "2" || status === 2 || status === "pending";
+      
+      return true;
+    });
+  }, [searchQuery, searchResults, data, filterStatus]);
 
   const handleViewProfile = async (id: string) => {
     // Navigate to the trucker detail page
@@ -172,6 +209,7 @@ export default function TruckersPage() {
   }
 
   return (
+    <>
     <div className="space-y-6 pb-12 bg-[#F8FAFC] min-h-screen">
       {/* Dashboard Header */}
       <div className="space-y-1">
@@ -186,9 +224,9 @@ export default function TruckersPage() {
                 <Users className="h-8 w-8 opacity-90" />
                 <Badge className="bg-white/20 hover:bg-white/30 border-none text-white text-[10px] font-bold px-2 py-0.5">Total</Badge>
               </div>
-              <div className="mt-4">
-                <p className="text-3xl font-bold">{data?.total_trucker || "0"}</p>
-                <p className="text-xs font-medium opacity-90 mt-1">Total Truckers</p>
+              <div className="mt-2">
+                <p className="text-3xl font-bold">{data?.total_transporters || data?.total_trucker || "0"}</p>
+                <p className="text-s font-medium opacity-90 mt-1">Total Truckers</p>
               </div>
             </Card>
 
@@ -197,31 +235,31 @@ export default function TruckersPage() {
                 <TrendingUp className="h-8 w-8 opacity-90" />
                 <Badge className="bg-white/20 hover:bg-white/30 border-none text-white text-[10px] font-bold px-2 py-0.5">Active</Badge>
               </div>
-              <div className="mt-4">
-                <p className="text-3xl font-bold">{data?.total_active_trucker || "0"}</p>
-                <p className="text-xs font-medium opacity-90 mt-1">Active Truckers</p>
+              <div className="mt-2">
+                <p className="text-3xl font-bold">{data?.total_active || data?.total_active_trucker || "0"}</p>
+                <p className="text-s font-medium opacity-90 mt-1">Active Truckers</p>
               </div>
             </Card>
 
             <Card className="bg-[#a855f7] border-none shadow-md p-6 text-white relative h-36 rounded-2xl">
               <div className="flex justify-between items-start">
                 <Truck className="h-8 w-8 opacity-90" />
-                <Badge className="bg-white/20 hover:bg-white/30 border-none text-white text-[10px] font-bold px-2 py-0.5">Fleet</Badge>
+                <Badge className="bg-white/20 hover:bg-white/30 border-none text-white text-[10px] font-bold px-2 py-0.5">Inactive</Badge>
               </div>
-              <div className="mt-4">
-                <p className="text-3xl font-bold">{data?.total_vehicle || "0"}</p>
-                <p className="text-xs font-medium opacity-90 mt-1">Total Vehicles</p>
+              <div className="mt-2">
+                <p className="text-3xl font-bold">{data?.total_inactive || "0"}</p>
+                <p className="text-s font-medium opacity-90 mt-1">Inactive Trucker</p>
               </div>
             </Card>
 
             <Card className="bg-[#f97316] border-none shadow-md p-6 text-white relative h-36 rounded-2xl">
               <div className="flex justify-between items-start">
                 <Package className="h-8 w-8 opacity-90" />
-                <Badge className="bg-white/20 hover:bg-white/30 border-none text-white text-[10px] font-bold px-2 py-0.5">Loads</Badge>
+                <Badge className="bg-white/20 hover:bg-white/30 border-none text-white text-[10px] font-bold px-2 py-0.5">Pending</Badge>
               </div>
-              <div className="mt-4">
-                <p className="text-3xl font-bold">{data?.total_applied || "0"}</p>
-                <p className="text-xs font-medium opacity-90 mt-1">Applied Loads</p>
+              <div className="mt-2">
+                <p className="text-3xl font-bold">{data?.total_pending || data?.total_applied || "0"}</p>
+                <p className="text-s font-medium opacity-90 mt-1">Pending Trucker</p>
               </div>
             </Card>
           </div>
@@ -256,10 +294,73 @@ export default function TruckersPage() {
                   <List className="h-5 w-5" />
                 </button>
               </div>
-              <Button variant="outline" className="h-14 px-6 rounded-xl border-gray-100 bg-white shadow-sm text-gray-600 font-semibold flex gap-3 hover:bg-gray-50">
-                <Filter className="h-5 w-5" />
-                Filters
-              </Button>
+              <div className="relative" ref={filterRef}>
+                <Button 
+                  onClick={() => setShowFilters(!showFilters)}
+                  variant="outline" 
+                  className={`h-14 px-6 rounded-xl border-gray-100 shadow-sm font-semibold flex gap-3 ${
+                    showFilters ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Filter className="h-5 w-5" />
+                  Filters
+                </Button>
+
+                {/* Filter Dropdown */}
+                {showFilters && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 p-3 z-10"
+                  >
+                    <p className="text-sm font-semibold text-gray-700 mb-3">
+                      Filter by Status
+                    </p>
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => setFilterStatus("all")}
+                        className={`w-full text-left px-4 py-2.5 rounded-lg transition-all ${
+                          filterStatus === "all"
+                            ? "bg-blue-50 text-blue-700 font-semibold"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        All Truckers
+                      </button>
+                      <button
+                        onClick={() => setFilterStatus("active")}
+                        className={`w-full text-left px-4 py-2.5 rounded-lg transition-all ${
+                          filterStatus === "active"
+                            ? "bg-emerald-50 text-emerald-700 font-semibold"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        Active
+                      </button>
+                      <button
+                        onClick={() => setFilterStatus("inactive")}
+                        className={`w-full text-left px-4 py-2.5 rounded-lg transition-all ${
+                          filterStatus === "inactive"
+                            ? "bg-gray-100 text-gray-700 font-semibold"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        Inactive
+                      </button>
+                      <button
+                        onClick={() => setFilterStatus("pending")}
+                        className={`w-full text-left px-4 py-2.5 rounded-lg transition-all ${
+                          filterStatus === "pending"
+                            ? "bg-amber-50 text-amber-700 font-semibold"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        Pending
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -292,9 +393,9 @@ export default function TruckersPage() {
                     }}
                     whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
                   >
-                    <Card className="p-5 border border-gray-100 shadow-sm hover:shadow-md transition-all bg-white rounded-xl relative">
+                    <Card className="p-5 border border-gray-100 shadow-sm hover:shadow-md transition-all bg-white rounded-xl relative h-full flex flex-col min-h-[380px]">
                       {/* Top Header */}
-                      <div className="flex items-start gap-4 mb-5">
+                      <div className="flex items-start gap-4 mb-5 pb-5 border-b border-gray-100">
                         <div className="h-16 w-16 rounded-lg bg-[#2563eb] flex items-center justify-center text-white text-xl font-bold flex-shrink-0 shadow-sm shadow-blue-100">
                           {t.images ? (
                             <img src={`${IMAGE_URL}${t.images}`} alt="" className="w-full h-full object-cover rounded-lg" />
@@ -303,57 +404,72 @@ export default function TruckersPage() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0 pt-1">
-                          <h3 className="font-bold text-[#1e293b] text-base truncate leading-tight mb-0.5">{t.transport_name || t.name}</h3>
-                          <p className="text-gray-400 font-medium truncate text-xs mb-2">{t.name}</p>
-                          <Badge className="bg-[#f0fdf4] text-[#10b981] border-none px-3 py-0.5 text-[10px] font-bold rounded-md">
-                            Active
+                          <h3 className="font-bold text-[#1e293b] text-base truncate leading-tight mb-0.5">{t.name}</h3>
+                          <p className="text-gray-500 font-medium truncate text-xs mb-1">{t.transport_name || "N/A"}</p>
+                          <p className="text-gray-400 font-medium truncate text-xs mb-2">{t.unique_id}</p>
+                          <Badge className={`border-none px-3 py-0.5 text-[10px] font-bold rounded-md ${
+                            t.verified_trucker_shipper === '1' || t.verified_trucker_shipper === 1 
+                              ? 'bg-[#f0fdf4] text-[#10b981]' 
+                              : t.verified_trucker_shipper === '0' || t.verified_trucker_shipper === 0
+                              ? 'bg-red-50 text-red-600'
+                              : 'bg-amber-50 text-amber-600'
+                          }`}>
+                            {t.verified_trucker_shipper === '1' || t.verified_trucker_shipper === 1 
+                              ? 'Active' 
+                              : t.verified_trucker_shipper === '0' || t.verified_trucker_shipper === 0
+                              ? 'Inactive'
+                              : 'Pending'}
                           </Badge>
                         </div>
                       </div>
 
-                      {/* Stats Grid */}
-                      <div className="grid grid-cols-2 gap-3 mb-5">
-                        <div className="p-4 bg-[#f0fdfa] rounded-lg border border-[#ccfbf1]/60">
-                          <p className="text-[10px] font-bold text-[#10b981] mb-1.5 uppercase tracking-tight">Completed Loads</p>
-                          <p className="text-2xl font-black text-[#047857] leading-none">{t.total_applied}</p>
-                        </div>
-                        <div className="p-4 bg-[#fffaf0] rounded-lg border border-[#ffedd5]/60">
-                          <div className="flex items-center gap-1.5 mb-1.5">
-                            <Truck className="h-3.5 w-3.5 text-[#f97316]" />
-                            <p className="text-[10px] font-bold text-[#f97316] uppercase tracking-tight">Vehicles</p>
+                      {/* Company Type and State Box */}
+                      <div className="px-0 border-b border-gray-100 mb-4 pb-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-blue-50/30 border border-blue-100 rounded-xl p-3 text-center min-h-[90px] flex flex-col justify-center">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <Building2 className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                              <span className="text-xs text-blue-500 font-semibold uppercase tracking-wide">Company Type</span>
+                            </div>
+                            <p className="text-sm font-bold text-gray-700 line-clamp-2">{t.company_type_name || t.company_type || "N/A"}</p>
                           </div>
-                          <p className="text-2xl font-black text-[#c2410c] leading-none">{t.total_vehicles}</p>
+                          <div className="bg-orange-50/30 border border-orange-100 rounded-xl p-3 text-center min-h-[90px] flex flex-col justify-center">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <MapPin className="h-4 w-4 text-orange-500 flex-shrink-0" />
+                              <span className="text-xs text-orange-500 font-semibold uppercase tracking-wide">State</span>
+                            </div>
+                            <p className="text-sm font-bold text-gray-700 line-clamp-2">{t.state_name || t.state || "Rajasthan"}</p>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Unique ID Center Bar */}
-                      <div className="bg-[#eff6ff] rounded-lg py-3 text-center mb-5 border border-blue-50/50">
-                        <span className="text-[#2563eb] font-bold text-sm tracking-widest">{t.unique_id}</span>
-                      </div>
-
-                      {/* Action Buttons Row */}
-                      <div className="grid grid-cols-3 gap-2">
+                      {/* Action Buttons Row - 4 buttons */}
+                      <div className="grid grid-cols-2 gap-2 mt-auto">
                         <Button
                           variant="outline"
-                          className="rounded-lg border-gray-200 h-10 text-gray-700 font-bold text-xs bg-white hover:bg-gray-50 flex items-center justify-center gap-2 px-0"
+                          className="rounded-lg border-gray-200 h-10 text-gray-700 font-bold text-xs bg-white hover:bg-gray-50 flex items-center justify-center gap-1.5 px-0"
                           onClick={() => handleViewProfile(t.id)}
                         >
                           <Eye className="h-3.5 w-3.5" />
-                          Profile
+                          View Profile
                         </Button>
                         <Button
-                          className="rounded-lg bg-[#2563eb] hover:bg-blue-700 text-white h-10 font-bold text-xs flex items-center justify-center gap-2 px-0 shadow-md shadow-blue-50"
+                          className="rounded-lg bg-[#2563eb] hover:bg-blue-700 text-white h-10 font-bold text-xs flex items-center justify-center gap-1.5 px-0 shadow-md shadow-blue-50"
                           onClick={() => router.push(`/truckers/${t.id}/vehicles`)}
                         >
                           <Truck className="h-3.5 w-3.5 text-white" />
-                          Trucks
+                          Trucks ({t.total_vehicles})
                         </Button>
                         <Button
-                          className="rounded-lg bg-[#059669] hover:bg-emerald-700 text-white h-10 font-bold text-xs flex items-center justify-center gap-2 px-0 shadow-md shadow-emerald-50"
+                          className="rounded-lg bg-[#059669] hover:bg-emerald-700 text-white h-10 font-bold text-xs flex items-center justify-center gap-1.5 px-0 shadow-md shadow-emerald-50"
                         >
                           <Phone className="h-3.5 w-3.5 text-white" />
                           Call
                         </Button>
+                        <div className="rounded-lg bg-purple-100 border border-purple-200 h-10 flex items-center justify-center gap-1.5 px-3">
+                          <FileText className="h-3.5 w-3.5 text-purple-600" />
+                          <span className="font-bold text-xs text-purple-700">Bids: {t.total_bids || t.total_applied || t.bid_count || 0}</span>
+                        </div>
                       </div>
                     </Card>
                   </motion.div>
@@ -373,22 +489,40 @@ export default function TruckersPage() {
                           <h3 className="font-bold text-gray-900 truncate">{t.name}</h3>
                           <p className="text-xs text-gray-600 truncate">{t.transport_name || "N/A"}</p>
                           <p className="text-xs text-gray-500 truncate">{t.unique_id}</p>
+                          <div className="mt-1">
+                            <Badge variant={
+                              t.verified_trucker_shipper === '1' || t.verified_trucker_shipper === 1 
+                                ? 'confirmed' 
+                                : t.verified_trucker_shipper === '0' || t.verified_trucker_shipper === 0
+                                ? 'cancelled'
+                                : 'pending'
+                            } className="text-[10px] px-2 py-0">
+                              {t.verified_trucker_shipper === '1' || t.verified_trucker_shipper === 1 
+                                ? 'Active' 
+                                : t.verified_trucker_shipper === '0' || t.verified_trucker_shipper === 0
+                                ? 'Inactive'
+                                : 'Pending'}
+                            </Badge>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Middle - Stats */}
-                      <div className="flex gap-8 items-center hidden md:flex">
-                        <div className="text-center">
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Loads</p>
-                          <p className="font-bold text-gray-900">{t.total_applied}</p>
+                      {/* Company Type and State - Left Side */}
+                      <div className="flex gap-6 mr-16 flex-shrink-0">
+                        <div className="flex flex-col gap-1 w-32">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                            <span className="text-xs text-gray-500 font-medium">State</span>
+                          </div>
+                          <span className="text-sm text-gray-800 font-semibold pl-5 truncate" title={t.state_name || t.state || "Rajasthan"}>{t.state_name || t.state || "Rajasthan"}</span>
                         </div>
-                        <div className="text-center">
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fleet</p>
-                          <p className="font-bold text-gray-900">{t.total_vehicles}</p>
+                        <div className="flex flex-col gap-1 w-40">
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+                            <span className="text-xs text-gray-500 font-medium">Company Type</span>
+                          </div>
+                          <span className="text-sm text-gray-800 font-semibold pl-5 truncate" title={t.company_type_name || t.company_type || "N/A"}>{t.company_type_name || t.company_type || "N/A"}</span>
                         </div>
-                        <Badge variant={t.verified_trucker_shipper === '1' ? 'confirmed' : 'cancelled'}>
-                          {t.verified_trucker_shipper === '1' ? 'Active' : 'Inactive'}
-                        </Badge>
                       </div>
 
                       {/* Right side - Action buttons */}
@@ -400,7 +534,7 @@ export default function TruckersPage() {
                           onClick={() => handleViewProfile(t.id)}
                         >
                           <Eye className="h-4 w-4 mr-1.5" />
-                          Profile
+                          View Profile
                         </Button>
                         <Button
                           size="sm"
@@ -408,7 +542,7 @@ export default function TruckersPage() {
                           onClick={() => router.push(`/truckers/${t.id}/vehicles`)}
                         >
                           <Truck className="h-4 w-4 mr-1.5" />
-                          Trucks
+                          Trucks ({t.total_vehicles})
                         </Button>
                         <Button
                           size="sm"
@@ -417,6 +551,10 @@ export default function TruckersPage() {
                           <Phone className="h-4 w-4 mr-1.5" />
                           Call
                         </Button>
+                        <div className="rounded-xl bg-purple-100 border border-purple-200 px-4 py-2 flex items-center justify-center gap-1.5">
+                          <FileText className="h-4 w-4 text-purple-600" />
+                          <span className="text-sm font-bold text-purple-700">Bids: {t.total_bids || t.total_applied || t.bid_count || 0}</span>
+                        </div>
                       </div>
                     </div>
                   </Card>
@@ -480,6 +618,12 @@ export default function TruckersPage() {
             </div>
           )}
     </div>
-
+    
+    {/* Search Modal */}
+    <SearchModal
+      isOpen={searchModalOpen}
+      onClose={() => setSearchModalOpen(false)}
+    />
+    </>
   );
 }

@@ -15,7 +15,10 @@ import {
   Users,
   PackagePlus,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import apiClient from "@/lib/api/client";
+import { BASE_URL } from "@/config/page";
+import Image from "next/image";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
@@ -28,6 +31,26 @@ const menuItems = [
   { icon: User, label: "Profile", href: "/profile" },
 ];
 
+interface EmployeeData {
+  id: number;
+  emp_id: string;
+  full_name: string;
+  email: string;
+  mobile: string;
+  department_id: string;
+  department_name: string;
+  designation: string;
+  doj: string;
+  work_location: string;
+  current_address: string;
+  city: string;
+  state_id: string;
+  state_name: string;
+  pin: string;
+  photo_path?: string;
+  photo_url?: string;
+}
+
 export interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -37,6 +60,32 @@ export interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose, collapsed, setCollapsed }: SidebarProps) {
   const pathname = usePathname();
+  const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
+
+  useEffect(() => {
+    const fetchEmployeeData = async () => {
+      try {
+        const response = await apiClient.get("/api/dashboard/employees/15");
+        if (response.data && response.data.status && response.data.data) {
+          setEmployeeData(response.data.data);
+        }
+      } catch (err) {
+        console.error("Error fetching employee data:", err);
+      }
+    };
+
+    fetchEmployeeData();
+  }, []);
+
+  const getInitials = (name: string) => {
+    if (!name) return "NA";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <aside
@@ -113,12 +162,34 @@ export function Sidebar({ isOpen, onClose, collapsed, setCollapsed }: SidebarPro
         {!collapsed && (
           <div className="border-t border-gray-200 p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-400" />
+              {employeeData?.photo_path ? (
+                <div className="h-10 w-10 rounded-full overflow-hidden bg-white border-2 border-gray-200 flex-shrink-0">
+                  <Image
+                    src={`${BASE_URL}/storage/app/public/${employeeData.photo_path}`}
+                    alt={employeeData.full_name || "Profile"}
+                    width={40}
+                    height={40}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-violet-500 to-purple-400 flex items-center justify-center text-white text-sm font-bold">${getInitials(employeeData?.full_name || "")}</div>`;
+                      }
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-400 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                  {getInitials(employeeData?.full_name || "")}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  Rahul Verma
+                  {employeeData?.full_name || "Loading..."}
                 </p>
-                <p className="text-xs text-gray-500 truncate">Sales Manager</p>
+                <p className="text-xs text-gray-500 truncate">{employeeData?.designation || "Sales Manager"}</p>
               </div>
             </div>
           </div>

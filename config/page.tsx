@@ -14,7 +14,7 @@ export const API_ENDPOINTS = {
         shipmentsLoads: "/api/dashboard/shipments/loads",
         applicationUpdate: "/api/dashboard/application/update",
         dashboardSummary: "/api/dashboard/dashboard-summary",
-        userSearch: (query: string) => `/dashboard/users/search?query=${encodeURIComponent(query)}`,
+        userSearch: (query: string) => `/api/dashboard/users/search?query=${encodeURIComponent(query)}`,
     },
     auth: {
         login: "/api/sales-login",

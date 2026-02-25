@@ -90,9 +90,9 @@ export default function LoadDetailPage() {
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
           <h2 className="mt-4 text-xl font-semibold text-gray-900">Load Not Found</h2>
           <p className="mt-2 text-gray-600">{error || "The load you're looking for doesn't exist."}</p>
-          <Button onClick={() => router.push("/loads")} className="mt-4">
+          <Button onClick={() => router.back()} className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Loads
+            Back
           </Button>
         </div>
       </div>

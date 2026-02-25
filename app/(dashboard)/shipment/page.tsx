@@ -37,6 +37,15 @@ import { useRouter } from "next/navigation";
 import apiClient from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/config/page";
 
+// Helper function to format date as dd/mm/yy
+const formatDateShort = (dateString: string) => {
+  const date = new Date(dateString);
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear().toString().slice(-2);
+  return `${day}/${month}/${year}`;
+};
+
 // --- API Interfaces ---
 interface APILoad {
   id: string;
@@ -124,7 +133,7 @@ export default function ShipmentPage() {
         rawOrigin: load.origin_location,
         rawDestination: load.destination_location,
         revenue: parseFloat(load.price),
-        rawPrice: load.price,
+        rawPrice: parseFloat(load.price).toLocaleString('en-IN'),
         status: uiStatus,
         rawStatus: load.status,
         cargo: {
@@ -133,10 +142,10 @@ export default function ShipmentPage() {
         },
         rawLoadQty: load.load_qty,
         pickupDate: load.pickup_date ? new Date(load.pickup_date) : new Date(load.created_at),
-        rawPickupDate: load.pickup_date || "N/A",
+        rawPickupDate: load.pickup_date ? formatDateShort(load.pickup_date) : "N/A",
         pickupTime: load.load_time || "N/A",
         rawPickupTime: load.load_time || "N/A",
-        rawCreatedAt: load.created_at,
+        rawCreatedAt: formatDateShort(load.created_at),
         bidsCount: parseInt(load.total_bids)
       };
     });
@@ -508,12 +517,6 @@ export default function ShipmentPage() {
                             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Price</p>
                             <p className="text-lg font-bold text-blue-600">₹{load.rawPrice}</p>
                           </div>
-                          <div className="text-center">
-                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-sm">
-                              <Users className="h-3 w-3" />
-                              <span className="text-xs font-bold">{load.bidsCount}</span>
-                            </div>
-                          </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2">
@@ -532,7 +535,7 @@ export default function ShipmentPage() {
                             className="bg-blue-600 hover:bg-blue-700 text-xs h-9 rounded-lg"
                           >
                             <Users className="mr-1 h-3 w-3" />
-                            Bids
+                            Bids ({load.bidsCount})
                           </Button>
                           <Button
                             size="sm"
@@ -590,11 +593,7 @@ export default function ShipmentPage() {
                           </div>
                           <div className="text-right">
                             <p className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Price</p>
-                            <p className="text-2xl font-bold text-blue-600 mb-1">₹{load.rawPrice}</p>
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-sm">
-                              <Users className="h-4 w-4" />
-                              <span className="text-sm font-bold">{load.bidsCount} Bids</span>
-                            </div>
+                            <p className="text-2xl font-bold text-blue-600">₹{load.rawPrice}</p>
                           </div>
                         </div>
 
@@ -636,7 +635,7 @@ export default function ShipmentPage() {
                           <div>
                             <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Qty</p>
                             <p className="font-semibold text-gray-900 text-sm">
-                              {load.rawLoadQty}
+                              {load.rawLoadQty} (Tonnes)
                             </p>
                           </div>
                           <div>
@@ -669,7 +668,7 @@ export default function ShipmentPage() {
                             className="flex-1 bg-blue-600 hover:bg-blue-700 rounded-lg h-10"
                           >
                             <Users className="mr-2 h-4 w-4" />
-                            View Bids
+                            View Bids ({load.bidsCount})
                           </Button>
                           <Button
                             size="sm"
