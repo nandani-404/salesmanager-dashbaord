@@ -83,25 +83,25 @@ export default function TruckerProfilePage() {
 
   const handleUpdateStatus = async () => {
     if (!trucker) return;
-    
+
     setUpdateStatusLoading(true);
     setUpdateStatusError(null);
     setUpdateStatusSuccess(false);
-    
+
     try {
       await apiClient.post(
         API_ENDPOINTS.dashboard.truckerUpdateStatus(trucker.id),
         { verified_trucker_shipper: kycVerified }
       );
-      
+
       setUpdateStatusSuccess(true);
-      
+
       // Update local trucker state
       setTrucker({
         ...trucker,
         verified_trucker_shipper: kycVerified.toString()
       });
-      
+
       // Auto-hide success message after 5 seconds
       setTimeout(() => setUpdateStatusSuccess(false), 5000);
     } catch (err: any) {
@@ -167,8 +167,8 @@ export default function TruckerProfilePage() {
                   className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden"
                 >
                   {trucker.images ? (
-                    <img 
-                      src={`${BASE_URL}/public/${trucker.images}`} 
+                    <img
+                      src={`${BASE_URL}/public/${trucker.images}`}
                       alt={trucker.name}
                       className="h-full w-full object-cover"
                     />
@@ -211,7 +211,7 @@ export default function TruckerProfilePage() {
               <div className="grid gap-4 sm:grid-cols-3 mb-6">
                 <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 px-4 py-3 rounded-lg">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Total Vehicles
+                    Vehicle Added
                   </p>
                   <p className="text-lg font-bold text-blue-700 mt-1">
                     {trucker.total_vehicles || "0"}
@@ -345,7 +345,7 @@ export default function TruckerProfilePage() {
                             className="absolute z-50 mt-2 w-96 bg-white border-2 border-blue-300 rounded-lg shadow-2xl p-4"
                           >
                             <div className="h-56 bg-gradient-to-br from-gray-100 to-gray-200 rounded flex items-center justify-center overflow-hidden">
-                              <img 
+                              <img
                                 src={`${BASE_URL}/public/${trucker.GST_Certificate}`}
                                 alt="GST Certificate"
                                 className="w-full h-full object-contain"
@@ -450,7 +450,7 @@ export default function TruckerProfilePage() {
                             className="absolute z-50 mt-2 w-96 bg-white border-2 border-violet-300 rounded-lg shadow-2xl p-4"
                           >
                             <div className="h-56 bg-gradient-to-br from-violet-100 to-purple-200 rounded flex items-center justify-center overflow-hidden">
-                              <img 
+                              <img
                                 src={`${BASE_URL}/public/${trucker.PAN_Image}`}
                                 alt="PAN Card"
                                 className="w-full h-full object-contain"

@@ -17,6 +17,7 @@ import {
   Clock,
   Loader2,
   AlertCircle,
+  Save,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import apiClient from "@/lib/api/client";
@@ -40,6 +41,9 @@ interface Application {
   material_name?: string;
   meterial_quantity?: string;
   load_price?: string;
+  final_status?: number;
+  shipper_updated_price?: string;
+  trucker_updated_price?: string;
 }
 
 interface LoadDetail {
@@ -64,25 +68,26 @@ export default function ShipmentBidsPage({
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [searchParams, setSearchParams] = useState<URLSearchParams | null>(null);
-  
+
   useEffect(() => {
     // Get search params on client side
     if (typeof window !== 'undefined') {
       setSearchParams(new URLSearchParams(window.location.search));
     }
   }, []);
-  
+
   const [counterDialogOpen, setCounterDialogOpen] = useState<string | null>(null);
   const [counterAmount, setCounterAmount] = useState("");
   const [counterOffers, setCounterOffers] = useState<Record<string, number>>({});
   const [acceptDialogOpen, setAcceptDialogOpen] = useState<string | null>(null);
   const [finalShipperPrice, setFinalShipperPrice] = useState("");
   const [finalTruckerPrice, setFinalTruckerPrice] = useState("");
-  const [finalStatus, setFinalStatus] = useState<"match" | "unmatch">("match");
+  const [finalStatus, setFinalStatus] = useState<"match" | "unmatch" | "save">("match");
   const [acceptLoading, setAcceptLoading] = useState(false);
   const [acceptError, setAcceptError] = useState<string | null>(null);
   const [acceptSuccess, setAcceptSuccess] = useState(false);
-  
+  const [draftBids, setDraftBids] = useState<Record<string, { shipperPrice: string, truckerPrice: string, status: string }>>({});
+
   // API state
   const [applications, setApplications] = useState<Application[]>([]);
   const [loadDetail, setLoadDetail] = useState<LoadDetail | null>(null);
@@ -99,13 +104,13 @@ export default function ShipmentBidsPage({
         setLoading(true);
         setError(null);
         console.log("Fetching applications for load ID:", id);
-        
+
         // Always try to fetch load details from shipments API first
         try {
           const shipmentsResponse = await apiClient.get<any>('/api/dashboard/shipments/loads');
           const loads = shipmentsResponse.data?.loads || [];
           const currentLoad = loads.find((l: any) => l.id.toString() === id.toString());
-          
+
           if (currentLoad) {
             console.log("Found load in shipments:", currentLoad);
             setLoadDetail({
@@ -124,14 +129,14 @@ export default function ShipmentBidsPage({
         } catch (loadErr) {
           console.log("Could not fetch load details from shipments API:", loadErr);
         }
-        
+
         // Then fetch applications
         try {
           const response = await apiClient.get<any>(`/api/dashboard/load/${id}/applications`);
           console.log("Applications response:", response.data);
-          
+
           const data = response.data;
-          
+
           // Extract load detail from response if available (override shipments data if present)
           if (data.load) {
             setLoadDetail(data.load);
@@ -151,7 +156,7 @@ export default function ShipmentBidsPage({
               load_time: null,
             });
           }
-          
+
           // Handle response structure - data is directly in data.data array
           if (data.data && Array.isArray(data.data)) {
             setApplications(data.data);
@@ -165,7 +170,7 @@ export default function ShipmentBidsPage({
         } catch (appErr: any) {
           const status = appErr?.response?.status;
           console.log("Applications API error status:", status);
-          
+
           // If 404, just set empty applications (load details already fetched above)
           if (status === 404) {
             console.log("No applications found (404)");
@@ -212,9 +217,12 @@ export default function ShipmentBidsPage({
       materialName: app.material_name || null,
       materialQuantity: app.meterial_quantity || null,
       loadPrice: app.load_price ? parseFloat(app.load_price) : null,
+      finalStatus: app.final_status,
+      shipperUpdatedPrice: app.shipper_updated_price,
+      truckerUpdatedPrice: app.trucker_updated_price,
     };
   });
-  
+
   console.log("Mapped bids:", bids);
 
   // Handle accept bid
@@ -226,22 +234,22 @@ export default function ShipmentBidsPage({
     try {
       // Find the bid to get additional data
       const bid = bids.find(b => b.id === bidId);
-      
+
       const payload = {
         apply_id: parseInt(bidId),
         trucker_updated_price: parseFloat(finalTruckerPrice) || 0,
         shipper_updated_price: parseFloat(finalShipperPrice) || 0,
-        final_status: finalStatus === "match" ? 1 : 0,
+        final_status: finalStatus === "match" ? 1 : finalStatus === "save" ? 2 : 0,
       };
 
       console.log("Accepting bid with payload:", payload);
 
       const response = await apiClient.post(API_ENDPOINTS.dashboard.applicationUpdate, payload);
-      
+
       console.log("Accept bid response:", response.data);
-      
+
       setAcceptSuccess(true);
-      
+
       // Close dialog after 2 seconds and refresh
       setTimeout(() => {
         setAcceptDialogOpen(null);
@@ -420,11 +428,10 @@ export default function ShipmentBidsPage({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
             >
-              <Card className={`relative overflow-hidden hover:shadow-lg transition-all duration-300 border-2 ${
-                index === 0 
-                  ? 'bg-gradient-to-br from-yellow-50/80 via-orange-50/60 to-amber-50/70 border-orange-500' 
-                  : 'bg-white border-gray-200'
-              }`}>
+              <Card className={`relative overflow-hidden hover:shadow-lg transition-all duration-300 border-2 ${index === 0
+                ? 'bg-gradient-to-br from-yellow-50/80 via-orange-50/60 to-amber-50/70 border-orange-500'
+                : 'bg-white border-gray-200'
+                }`}>
                 {/* Best Bid Ribbon */}
                 {index === 0 && (
                   <div className="absolute top-0 right-0 z-10">
@@ -455,9 +462,17 @@ export default function ShipmentBidsPage({
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-gray-500 uppercase mb-0.5">Bid Price</p>
-                      <p className="text-2xl font-bold text-indigo-600">
-                        ₹{(counterOffers[bid.id] || bid.bidAmount).toLocaleString('en-IN')}
-                      </p>
+                      <div className="flex items-center gap-2 justify-end">
+                        {(draftBids[bid.id] || bid.finalStatus === 2) && (
+                          <div className="flex items-center gap-1 bg-amber-50 text-amber-600 px-2 py-0.5 rounded border border-amber-200 shadow-sm">
+                            <Save className="h-3 w-3" />
+                            <span className="text-[10px] font-bold uppercase tracking-wide">Draft Saved</span>
+                          </div>
+                        )}
+                        <p className="text-2xl font-bold text-indigo-600">
+                          ₹{(counterOffers[bid.id] || bid.bidAmount).toLocaleString('en-IN')}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -521,16 +536,18 @@ export default function ShipmentBidsPage({
                       className="flex-1 bg-green-600 hover:bg-green-700 text-white h-9"
                       onClick={() => {
                         setAcceptDialogOpen(bid.id);
-                        setFinalShipperPrice(load.revenue.toString());
-                        setFinalTruckerPrice((counterOffers[bid.id] || bid.bidAmount).toString());
+                        const draft = draftBids[bid.id];
+                        setFinalShipperPrice(draft ? draft.shipperPrice : (bid.shipperUpdatedPrice || load.revenue.toString()));
+                        setFinalTruckerPrice(draft ? draft.truckerPrice : (bid.truckerUpdatedPrice || counterOffers[bid.id]?.toString() || bid.bidAmount.toString()));
+                        setFinalStatus(draft ? (draft.status as "match" | "unmatch" | "save") : (bid.finalStatus === 2 ? "save" : "match"));
                       }}
                     >
                       <CheckCircle className="mr-1.5 h-4 w-4" />
-                      Accept
+                      Negotiate
                     </Button>
                   </div>
 
-                  {/* Accept Dialog */}
+                  {/* Negotiate Dialog */}
                   {acceptDialogOpen === bid.id && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
@@ -540,7 +557,7 @@ export default function ShipmentBidsPage({
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="text-base font-bold text-green-900 flex items-center gap-2">
                           <CheckCircle className="h-5 w-5 text-green-600" />
-                          Accept Bid
+                          Negotiate Bid
                         </h4>
                         <button
                           onClick={() => {
@@ -554,7 +571,7 @@ export default function ShipmentBidsPage({
                           <XCircle className="h-5 w-5" />
                         </button>
                       </div>
-                      
+
                       {/* Summary Grid */}
                       <div className="grid grid-cols-2 gap-3 mb-3">
                         <div className="p-3 bg-white rounded-lg border border-blue-200 shadow-sm">
@@ -630,11 +647,12 @@ export default function ShipmentBidsPage({
                           <label className="text-[10px] font-bold text-gray-700 mb-1 block uppercase">Status</label>
                           <select
                             value={finalStatus}
-                            onChange={(e) => setFinalStatus(e.target.value as "match" | "unmatch")}
+                            onChange={(e) => setFinalStatus(e.target.value as "match" | "unmatch" | "save")}
                             className="w-full h-9 px-2 text-sm font-semibold border-2 border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
                           >
                             <option value="match">✓ Match</option>
                             <option value="unmatch">✗ Unmatch</option>
+                            <option value="save">💾 Save</option>
                           </select>
                         </div>
                       </div>
@@ -647,7 +665,7 @@ export default function ShipmentBidsPage({
                             handleAcceptBid(bid.id);
                           }}
                           disabled={acceptLoading}
-                          className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-9 font-bold shadow-md disabled:opacity-50"
+                          className="flex-[2] bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-9 font-bold shadow-md disabled:opacity-50"
                         >
                           {acceptLoading ? (
                             <>

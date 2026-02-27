@@ -141,6 +141,7 @@ export interface Shipper {
   profileUpdatedAt: string | null;
   kycVerified: string;
   status: string;
+  createdAt?: string | null;
 }
 
 export interface TruckerBid {

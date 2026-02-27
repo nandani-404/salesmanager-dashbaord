@@ -156,7 +156,7 @@ export default function TruckerVehiclesPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-gray-700">Vehicles</h1>
-            <p className="text-sm text-gray-600 mt-1">Trucker ID: {truckerUniqueId || truckerId}</p>
+            <p className="text-sm text-gray-600 mt-1">{truckerUniqueId || truckerId}</p>
           </div>
         </motion.div>
 

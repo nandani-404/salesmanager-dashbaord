@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   Users,
   PackagePlus,
+  CreditCard,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import apiClient from "@/lib/api/client";
@@ -26,6 +27,7 @@ const menuItems = [
   { icon: Users, label: "My Truckers", href: "/truckers" },
   { icon: PackagePlus, label: "Shipment", href: "/shipment" },
   { icon: CheckSquare, label: "Accepted Loads", href: "/loads" },
+  { icon: CreditCard, label: "Payment", href: "/payment" },
   { icon: Navigation, label: "In Transit", href: "/in-transit" },
   { icon: BarChart3, label: "Reports", href: "/reports" },
   { icon: User, label: "Profile", href: "/profile" },
