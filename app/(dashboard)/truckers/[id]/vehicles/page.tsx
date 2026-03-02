@@ -7,6 +7,7 @@ import { ArrowLeft, Truck, ChevronLeft, ChevronRight, Loader2 } from "lucide-rea
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import apiClient from "@/lib/api/client";
+import EmptyState from "@/components/ui/EmptyState";
 
 interface ApiVehicle {
   id: number;
@@ -66,7 +67,7 @@ export default function TruckerVehiclesPage() {
         console.log("Full API Response:", response);
         console.log("Response data:", response.data);
         const apiData = response.data;
-        
+
         // Handle the API response structure: data.data contains the vehicles array
         let vehiclesList = [];
         if (apiData.data && apiData.data.data) {
@@ -85,11 +86,11 @@ export default function TruckerVehiclesPage() {
           console.log("Unexpected data structure:", apiData);
           console.log("Data keys:", Object.keys(apiData));
         }
-        
+
         console.log("Final vehicles list:", vehiclesList);
         console.log("Is array?", Array.isArray(vehiclesList));
         console.log("Length:", vehiclesList.length);
-        
+
         const finalList = Array.isArray(vehiclesList) ? vehiclesList : [];
         setVehicles(finalList);
         console.log("Set vehicles state to:", finalList);
@@ -109,7 +110,7 @@ export default function TruckerVehiclesPage() {
       fetchVehicles();
     }
   }, [truckerId]);
-  
+
   // Calculate pagination
   const totalPages = Math.ceil(vehicles.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -268,17 +269,10 @@ export default function TruckerVehiclesPage() {
 
         {/* No Vehicles */}
         {!loading && !error && vehicles.length === 0 && (
-          <Card>
-            <div className="p-12 text-center">
-              <Truck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                No Vehicles Found
-              </h3>
-              <p className="text-sm text-gray-600">
-                This trucker hasn't added any vehicles yet.
-              </p>
-            </div>
-          </Card>
+          <EmptyState
+            title="No Vehicles Found"
+            message="This trucker hasn't added any vehicles yet"
+          />
         )}
 
         {/* Pagination */}
@@ -336,11 +330,10 @@ export default function TruckerVehiclesPage() {
                       variant={currentPage === page ? "primary" : "outline"}
                       size="sm"
                       onClick={() => handlePageChange(page)}
-                      className={`h-9 w-9 p-0 rounded-lg ${
-                        currentPage === page
+                      className={`h-9 w-9 p-0 rounded-lg ${currentPage === page
                           ? "bg-blue-600 hover:bg-blue-700 text-white"
                           : "hover:bg-gray-100"
-                      }`}
+                        }`}
                     >
                       {page}
                     </Button>

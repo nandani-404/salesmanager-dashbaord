@@ -503,8 +503,12 @@ export default function TruckersPage() {
                   <div className="flex items-center justify-between gap-4">
                     {/* Left side - Profile info */}
                     <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold uppercase flex-shrink-0">
-                        {(t.name || "?").charAt(0)}
+                      <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold uppercase flex-shrink-0 overflow-hidden">
+                        {t.images ? (
+                          <img src={`${IMAGE_URL}${t.images}`} alt={t.name} className="w-full h-full object-cover" />
+                        ) : (
+                          (t.name || "?").charAt(0)
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="font-bold text-gray-900 truncate">{t.name}</h3>

@@ -12,6 +12,7 @@ import {
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import apiClient from "@/lib/api/client";
 
 // --- Types ---
 interface PaymentItem {
@@ -49,77 +50,7 @@ interface PaymentItem {
     updated_at: string;
 }
 
-// Mock data matching the payment page
-const mockPayments: PaymentItem[] = [
-    {
-        id: 1,
-        load_id: "LD10023",
-        shipper_id: "SHP001",
-        shipper_name: "Acme Logistics",
-        trucker_id: "TRK001",
-        trucker_name: "Rahul Transports",
-        shipper_total_amount: "50000",
-        trucker_total_amount: "45000",
-        shipper_paid_amount: "25000",
-        trucker_received_amount: "20000",
-        shipper_partial_paid_at: "2026-02-10T10:00:00Z",
-        shipper_completed_paid_at: null,
-        shipper_refunded_at: null,
-        trucker_partial_received_at: "2026-02-11T12:00:00Z",
-        trucker_completed_received_at: null,
-        shipper_due_amount: "25000",
-        trucker_due_amount: "25000",
-        shipment_status: "In Transit",
-        shipper_payment_status: "Partial",
-        trucker_payment_status: "Partial",
-        origin_location: "Mumbai, Maharashtra",
-        destination_location: "Delhi, NCR",
-        shipment_date: "2026-02-09T08:00:00Z",
-        vehicle_number: "MH04AB1234",
-        driver_name: "Ramesh Singh",
-        dl_number: "MH041999123456",
-        driver_phone: "9876543210",
-        builty_path: null,
-        pod_path: null,
-        overdue_date: "2026-03-09T08:00:00Z",
-        created_at: "2026-02-08T09:00:00Z",
-        updated_at: "2026-02-11T12:00:00Z"
-    },
-    {
-        id: 2,
-        load_id: "LD10024",
-        shipper_id: "SHP002",
-        shipper_name: "Global Traders",
-        trucker_id: "TRK002",
-        trucker_name: "Singh Roadways",
-        shipper_total_amount: "80000",
-        trucker_total_amount: "76000",
-        shipper_paid_amount: "0",
-        trucker_received_amount: "0",
-        shipper_partial_paid_at: null,
-        shipper_completed_paid_at: null,
-        shipper_refunded_at: null,
-        trucker_partial_received_at: null,
-        trucker_completed_received_at: null,
-        shipper_due_amount: "80000",
-        trucker_due_amount: "76000",
-        shipment_status: "Pending",
-        shipper_payment_status: "Pending",
-        trucker_payment_status: "Pending",
-        origin_location: "Pune, Maharashtra",
-        destination_location: "Bangalore, Karnataka",
-        shipment_date: "2026-02-12T08:00:00Z",
-        vehicle_number: "MH12CD5678",
-        driver_name: "Suresh Kumar",
-        dl_number: "MH122000345678",
-        driver_phone: "8765432109",
-        builty_path: null,
-        pod_path: null,
-        overdue_date: "2026-03-12T08:00:00Z",
-        created_at: "2026-02-10T09:00:00Z",
-        updated_at: "2026-02-10T09:00:00Z"
-    }
-];
+
 
 // --- Helper Component: Info Row ---
 function InfoRow({ icon: Icon, label, value, valueColor, iconColor }: {
@@ -161,30 +92,39 @@ function AmountCard({ label, amount, bgColor, textColor, labelColor }: {
 export default function PaymentDetailPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const paymentId = searchParams.get("id");
+    const settlementId = searchParams.get("id");
 
     const [payment, setPayment] = useState<PaymentItem | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchPaymentDetail = async () => {
+            if (!settlementId) {
+                setError("No settlement ID provided.");
+                setLoading(false);
+                return;
+            }
             setLoading(true);
+            setError(null);
             try {
-                // Simulating API call - replace with actual API
-                // const response = await apiClient.get(`/api/payments/${paymentId}`);
-                await new Promise(resolve => setTimeout(resolve, 600));
+                const response = await apiClient.get(`/api/dashboard/settlements/${settlementId}`);
 
-                const found = mockPayments.find(p => p.id === Number(paymentId)) || mockPayments[0];
-                setPayment(found);
-            } catch (err) {
-                console.error("Failed to fetch payment detail");
+                if (response.data && response.data.status) {
+                    setPayment(response.data.data);
+                } else {
+                    setError(response.data?.message || "Failed to load payment details.");
+                }
+            } catch (err: any) {
+                console.error("Failed to fetch payment detail:", err);
+                setError("Failed to fetch payment details. Please try again.");
             } finally {
                 setLoading(false);
             }
         };
 
         fetchPaymentDetail();
-    }, [paymentId]);
+    }, [settlementId]);
 
     const formatCurrency = (amount: string | number) => {
         return new Intl.NumberFormat('en-IN', {
@@ -245,11 +185,11 @@ export default function PaymentDetailPage() {
         );
     }
 
-    if (!payment) {
+    if (error || !payment) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
                 <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-                <p className="text-gray-500">Payment not found.</p>
+                <p className="text-gray-500">{error || "Payment not found."}</p>
                 <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
             </div>
         );
@@ -440,75 +380,6 @@ export default function PaymentDetailPage() {
                         </Card>
                     </motion.div>
 
-                    {/* Payment Invoice */}
-                    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                        <Card className="border border-gray-200 shadow-sm bg-white rounded-2xl overflow-hidden">
-                            <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-indigo-50/50 to-white flex items-center gap-3">
-                                <div className="p-2 bg-indigo-100 rounded-xl">
-                                    <Receipt className="h-5 w-5 text-indigo-600" />
-                                </div>
-                                <h3 className="text-[16px] font-bold text-[#0f172a]">Payment Invoice</h3>
-                            </div>
-                            <div className="p-5">
-                                {/* Invoice Info */}
-                                <div className="bg-gray-50/50 border border-gray-100/50 rounded-xl p-4 mb-4">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Invoice No.</p>
-                                        <p className="text-[14px] font-bold text-[#0f172a]">INV-{payment.load_id}-{String(payment.id).padStart(4, '0')}</p>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Invoice Date</p>
-                                        <p className="text-[14px] font-semibold text-[#475569]">{formatDate(payment.created_at)}</p>
-                                    </div>
-                                </div>
-
-                                {/* Amount Breakdown */}
-                                <div className="space-y-3 mb-4">
-                                    <div className="flex items-center justify-between py-2">
-                                        <span className="text-[13px] text-gray-500">Shipper Total</span>
-                                        <span className="text-[14px] font-bold text-[#1e293b]">{formatCurrency(payment.shipper_total_amount)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between py-2">
-                                        <span className="text-[13px] text-gray-500">Trucker Total</span>
-                                        <span className="text-[14px] font-bold text-[#1e293b]">{formatCurrency(payment.trucker_total_amount)}</span>
-                                    </div>
-                                    <div className="border-t border-dashed border-gray-200 my-1"></div>
-                                    <div className="flex items-center justify-between py-2">
-                                        <span className="text-[13px] font-bold text-gray-600">Margin</span>
-                                        <span className="text-[16px] font-extrabold text-emerald-600">
-                                            {formatCurrency(Number(payment.shipper_total_amount) - Number(payment.trucker_total_amount))}
-                                        </span>
-                                    </div>
-                                    <div className="border-t border-gray-100 my-1"></div>
-                                    <div className="flex items-center justify-between py-2">
-                                        <span className="text-[13px] text-gray-500">Shipper Paid</span>
-                                        <span className="text-[14px] font-semibold text-emerald-600">{formatCurrency(payment.shipper_paid_amount)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between py-2">
-                                        <span className="text-[13px] text-gray-500">Shipper Due</span>
-                                        <span className="text-[14px] font-semibold text-red-500">{formatCurrency(payment.shipper_due_amount)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between py-2">
-                                        <span className="text-[13px] text-gray-500">Trucker Paid</span>
-                                        <span className="text-[14px] font-semibold text-emerald-600">{formatCurrency(payment.trucker_received_amount)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between py-2">
-                                        <span className="text-[13px] text-gray-500">Trucker Due</span>
-                                        <span className="text-[14px] font-semibold text-red-500">{formatCurrency(payment.trucker_due_amount)}</span>
-                                    </div>
-                                </div>
-
-                                {/* Download Button */}
-                                <Button
-                                    variant="outline"
-                                    className="w-full h-11 bg-indigo-50/50 text-indigo-600 border-indigo-200 hover:bg-indigo-100/50 hover:border-indigo-300 hover:text-indigo-700 shadow-sm font-bold text-[13px] rounded-xl transition-all flex items-center gap-2"
-                                >
-                                    <Download className="h-4 w-4" />
-                                    Download Invoice
-                                </Button>
-                            </div>
-                        </Card>
-                    </motion.div>
                 </div>
 
                 {/* === RIGHT COLUMN === */}
@@ -618,65 +489,49 @@ export default function PaymentDetailPage() {
                             </div>
                         </Card>
                     </motion.div>
-
-                    {/* Documents Section */}
-                    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-                        <Card className="border border-gray-200 shadow-sm bg-white rounded-2xl overflow-hidden">
-                            <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-cyan-50/50 to-white flex items-center gap-3">
-                                <div className="p-2 bg-cyan-100 rounded-xl">
-                                    <FileText className="h-5 w-5 text-cyan-600" />
-                                </div>
-                                <h3 className="text-[16px] font-bold text-[#0f172a]">Documents</h3>
-                            </div>
-                            <div className="p-6">
-                                <div className="grid grid-cols-2 gap-5">
-                                    {/* Bility Document */}
-                                    <div className={`border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center min-h-[220px] ${payment.builty_path ? 'border-emerald-200 bg-emerald-50/30 cursor-pointer hover:bg-emerald-50/60 hover:shadow-md transition-all' : 'border-gray-200 bg-gray-50/30'}`}>
-                                        {payment.builty_path ? (
-                                            <>
-                                                <div className="p-4 bg-emerald-100 rounded-2xl mb-3">
-                                                    <ImageIcon className="h-10 w-10 text-emerald-600" />
-                                                </div>
-                                                <p className="text-[14px] font-bold text-emerald-700">Bility</p>
-                                                <p className="text-[11px] text-emerald-500 mt-1">Tap to view document</p>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <div className="p-4 bg-gray-100 rounded-2xl mb-3">
-                                                    <ImageIcon className="h-10 w-10 text-gray-300" />
-                                                </div>
-                                                <p className="text-[14px] font-bold text-gray-400">Bility</p>
-                                                <p className="text-[11px] text-gray-300 mt-1">Not uploaded yet</p>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* POD Document */}
-                                    <div className={`border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center min-h-[220px] ${payment.pod_path ? 'border-emerald-200 bg-emerald-50/30 cursor-pointer hover:bg-emerald-50/60 hover:shadow-md transition-all' : 'border-gray-200 bg-gray-50/30'}`}>
-                                        {payment.pod_path ? (
-                                            <>
-                                                <div className="p-4 bg-emerald-100 rounded-2xl mb-3">
-                                                    <FileText className="h-10 w-10 text-emerald-600" />
-                                                </div>
-                                                <p className="text-[14px] font-bold text-emerald-700">POD</p>
-                                                <p className="text-[11px] text-emerald-500 mt-1">Tap to view document</p>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <div className="p-4 bg-gray-100 rounded-2xl mb-3">
-                                                    <FileText className="h-10 w-10 text-gray-300" />
-                                                </div>
-                                                <p className="text-[14px] font-bold text-gray-400">POD</p>
-                                                <p className="text-[11px] text-gray-300 mt-1">Not uploaded yet</p>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </Card>
-                    </motion.div>
                 </div>
             </div>
+
+            {/* Documents Section - Full Width */}
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                <Card className="border border-gray-200 shadow-sm bg-white rounded-2xl overflow-hidden">
+                    <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-cyan-50/50 to-white flex items-center gap-3">
+                        <div className="p-2 bg-cyan-100 rounded-xl">
+                            <FileText className="h-5 w-5 text-cyan-600" />
+                        </div>
+                        <h3 className="text-[16px] font-bold text-[#0f172a]">Documents</h3>
+                    </div>
+                    <div className="p-6">
+                        <div className="grid grid-cols-2 gap-6">
+                            {/* Bilty Document */}
+                            <div className={`border-2 border-dashed rounded-2xl flex items-center gap-5 px-6 min-h-[140px] ${payment.builty_path ? 'border-emerald-200 bg-emerald-50/30 cursor-pointer hover:bg-emerald-50/60 hover:shadow-md transition-all' : 'border-gray-200 bg-gray-50/30'}`}>
+                                <div className={`p-4 rounded-2xl flex-shrink-0 ${payment.builty_path ? 'bg-emerald-100' : 'bg-gray-100'}`}>
+                                    <ImageIcon className={`h-10 w-10 ${payment.builty_path ? 'text-emerald-600' : 'text-gray-300'}`} />
+                                </div>
+                                <div>
+                                    <p className={`text-[16px] font-bold ${payment.builty_path ? 'text-emerald-700' : 'text-gray-400'}`}>Bilty</p>
+                                    <p className={`text-[12px] mt-1 ${payment.builty_path ? 'text-emerald-500' : 'text-gray-300'}`}>
+                                        {payment.builty_path ? 'Tap to view document' : 'Not uploaded yet'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* POD Document */}
+                            <div className={`border-2 border-dashed rounded-2xl flex items-center gap-5 px-6 min-h-[140px] ${payment.pod_path ? 'border-emerald-200 bg-emerald-50/30 cursor-pointer hover:bg-emerald-50/60 hover:shadow-md transition-all' : 'border-gray-200 bg-gray-50/30'}`}>
+                                <div className={`p-4 rounded-2xl flex-shrink-0 ${payment.pod_path ? 'bg-emerald-100' : 'bg-gray-100'}`}>
+                                    <FileText className={`h-10 w-10 ${payment.pod_path ? 'text-emerald-600' : 'text-gray-300'}`} />
+                                </div>
+                                <div>
+                                    <p className={`text-[16px] font-bold ${payment.pod_path ? 'text-emerald-700' : 'text-gray-400'}`}>POD</p>
+                                    <p className={`text-[12px] mt-1 ${payment.pod_path ? 'text-emerald-500' : 'text-gray-300'}`}>
+                                        {payment.pod_path ? 'Tap to view document' : 'Not uploaded yet'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Card>
+            </motion.div>
         </div>
     );
 }

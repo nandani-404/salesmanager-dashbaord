@@ -25,7 +25,7 @@ import {
 
 /* ── Inline SVG icons (avoids lucide-react barrel-export HMR bug) ── */
 
-function IndianRupeeIcon({ className }: { className?: string }) {
+function IndianRupeeIcon({ 654className }: { className?: string }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -228,8 +228,8 @@ export default function DashboardPage() {
     {
       title: "Total Revenue",
       value: loading ? "..." : formatCurrency(parseFloat(dashboardData?.total_revenue || "0") || 0),
-      
-      changeType: "positive" as const,
+      change: "Overall revenue",
+      changeType: "neutral" as const,
       icon: IndianRupeeIcon,
     },
     {
@@ -260,25 +260,25 @@ export default function DashboardPage() {
   // Format month_wise_revenue data for the chart
   const revenueData = (dashboardData?.month_wise_revenue && dashboardData.month_wise_revenue.length > 0)
     ? dashboardData.month_wise_revenue.map((item: any) => {
-        // Parse month from "2026-02" format to "Feb" format
-        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const [year, monthNum] = item.month.split("-");
-        const monthIndex = parseInt(monthNum) - 1;
-        const monthName = monthNames[monthIndex] || monthNum;
-        
-        return {
-          month: monthName,
-          revenue: parseFloat(item.total || "0")
-        };
-      })
+      // Parse month from "2026-02" format to "Feb" format
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const [year, monthNum] = item.month.split("-");
+      const monthIndex = parseInt(monthNum) - 1;
+      const monthName = monthNames[monthIndex] || monthNum;
+
+      return {
+        month: monthName,
+        revenue: parseFloat(item.total || "0")
+      };
+    })
     : [
-        { month: "Jun", revenue: 3500000 },
-        { month: "Jul", revenue: 4100000 },
-        { month: "Aug", revenue: 3800000 },
-        { month: "Sep", revenue: 4800000 },
-        { month: "Oct", revenue: 4600000 },
-        { month: "Nov", revenue: 5300000 },
-      ];
+      { month: "Jun", revenue: 3500000 },
+      { month: "Jul", revenue: 4100000 },
+      { month: "Aug", revenue: 3800000 },
+      { month: "Sep", revenue: 4800000 },
+      { month: "Oct", revenue: 4600000 },
+      { month: "Nov", revenue: 5300000 },
+    ];
 
   const routeData = dashboardData?.route_data || [
     { route: "MUM-DEL", loads: 45 },
@@ -287,79 +287,79 @@ export default function DashboardPage() {
     { route: "CHE-BLR", loads: 28 },
   ];
 
-  const recentShippers = (dashboardData?.recent_shippers && dashboardData.recent_shippers.length > 0) 
+  const recentShippers = (dashboardData?.recent_shippers && dashboardData.recent_shippers.length > 0)
     ? dashboardData.recent_shippers.map((shipper: any) => {
-        let formattedDate = "N/A";
-        try {
-          if (shipper.created_at) {
-            const date = new Date(shipper.created_at);
-            formattedDate = date.toLocaleString("en-US", { 
-              month: "short", 
-              day: "numeric", 
-              year: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true
-            });
-          }
-        } catch (e) {
-          formattedDate = shipper.created_at || "N/A";
+      let formattedDate = "N/A";
+      try {
+        if (shipper.created_at) {
+          const date = new Date(shipper.created_at);
+          formattedDate = date.toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true
+          });
         }
-        
-        return {
-          id: shipper.id.toString(),
-          name: shipper.name,
-          company: shipper.name,
-          tmId: shipper.unique_id || `TMSH${shipper.id}`,
-          location: shipper.state_name || "N/A",
-          date: formattedDate,
-          image: shipper.images ? `${BASE_URL}/public/${shipper.images}` : null
-        };
-      })
+      } catch (e) {
+        formattedDate = shipper.created_at || "N/A";
+      }
+
+      return {
+        id: shipper.id.toString(),
+        name: shipper.name,
+        company: shipper.name,
+        tmId: shipper.unique_id || `TMSH${shipper.id}`,
+        location: shipper.state_name || "N/A",
+        date: formattedDate,
+        image: shipper.images ? `${BASE_URL}/public/${shipper.images}` : null
+      };
+    })
     : [
-        { id: "1", name: "Bharat Logistics", company: "Bharat Logistics Pvt Ltd", tmId: "TMSH001", location: "Mumbai", date: "20 Nov 2024", image: null },
-        { id: "2", name: "Express Transport", company: "Express Transport Solutions", tmId: "TMSH002", location: "Bangalore", date: "18 Nov 2024", image: null },
-        { id: "3", name: "North India Cargo", company: "North India Cargo Services", tmId: "TMSH003", location: "Delhi", date: "15 Nov 2024", image: null },
-        { id: "4", name: "South Freight", company: "South Freight Co", tmId: "TMSH004", location: "Chennai", date: "12 Nov 2024", image: null },
-        { id: "5", name: "Western Logistics", company: "Western Logistics Hub", tmId: "TMSH005", location: "Pune", date: "10 Nov 2024", image: null },
-      ];
+      { id: "1", name: "Bharat Logistics", company: "Bharat Logistics Pvt Ltd", tmId: "TMSH001", location: "Mumbai", date: "20 Nov 2024", image: null },
+      { id: "2", name: "Express Transport", company: "Express Transport Solutions", tmId: "TMSH002", location: "Bangalore", date: "18 Nov 2024", image: null },
+      { id: "3", name: "North India Cargo", company: "North India Cargo Services", tmId: "TMSH003", location: "Delhi", date: "15 Nov 2024", image: null },
+      { id: "4", name: "South Freight", company: "South Freight Co", tmId: "TMSH004", location: "Chennai", date: "12 Nov 2024", image: null },
+      { id: "5", name: "Western Logistics", company: "Western Logistics Hub", tmId: "TMSH005", location: "Pune", date: "10 Nov 2024", image: null },
+    ];
 
   const recentTruckers = (dashboardData?.recent_transporters && dashboardData.recent_transporters.length > 0)
     ? dashboardData.recent_transporters.map((trucker: any) => {
-        let formattedDate = "N/A";
-        try {
-          if (trucker.created_at) {
-            const date = new Date(trucker.created_at);
-            formattedDate = date.toLocaleString("en-US", { 
-              month: "short", 
-              day: "numeric", 
-              year: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true
-            });
-          }
-        } catch (e) {
-          formattedDate = trucker.created_at || "N/A";
+      let formattedDate = "N/A";
+      try {
+        if (trucker.created_at) {
+          const date = new Date(trucker.created_at);
+          formattedDate = date.toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true
+          });
         }
-        
-        return {
-          id: trucker.id.toString(),
-          name: trucker.name,
-          company: trucker.name,
-          tmId: trucker.unique_id || `TMTR${trucker.id}`,
-          location: trucker.state_name || "N/A",
-          date: formattedDate,
-          image: trucker.images ? `${BASE_URL}/public/${trucker.images}` : null
-        };
-      })
+      } catch (e) {
+        formattedDate = trucker.created_at || "N/A";
+      }
+
+      return {
+        id: trucker.id.toString(),
+        name: trucker.name,
+        company: trucker.name,
+        tmId: trucker.unique_id || `TMTR${trucker.id}`,
+        location: trucker.state_name || "N/A",
+        date: formattedDate,
+        image: trucker.images ? `${BASE_URL}/public/${trucker.images}` : null
+      };
+    })
     : [
-        { id: "1", name: "Rajesh Kumar", company: "Kumar Transport", tmId: "TMTR001", location: "Mumbai", date: "20 Nov 2024", image: null },
-        { id: "2", name: "Amit Sharma", company: "Sharma Logistics", tmId: "TMTR002", location: "Bangalore", date: "19 Nov 2024", image: null },
-        { id: "3", name: "Suresh Patel", company: "Patel Freight", tmId: "TMTR003", location: "Kolkata", date: "17 Nov 2024", image: null },
-        { id: "4", name: "Vikram Singh", company: "Singh Express", tmId: "TMTR004", location: "Delhi", date: "14 Nov 2024", image: null },
-        { id: "5", name: "Arjun Mehta", company: "Mehta Transport", tmId: "TMTR005", location: "Ahmedabad", date: "11 Nov 2024", image: null },
-      ];
+      { id: "1", name: "Rajesh Kumar", company: "Kumar Transport", tmId: "TMTR001", location: "Mumbai", date: "20 Nov 2024", image: null },
+      { id: "2", name: "Amit Sharma", company: "Sharma Logistics", tmId: "TMTR002", location: "Bangalore", date: "19 Nov 2024", image: null },
+      { id: "3", name: "Suresh Patel", company: "Patel Freight", tmId: "TMTR003", location: "Kolkata", date: "17 Nov 2024", image: null },
+      { id: "4", name: "Vikram Singh", company: "Singh Express", tmId: "TMTR004", location: "Delhi", date: "14 Nov 2024", image: null },
+      { id: "5", name: "Arjun Mehta", company: "Mehta Transport", tmId: "TMTR005", location: "Ahmedabad", date: "11 Nov 2024", image: null },
+    ];
 
   return (
     <div className="space-y-6">
@@ -602,7 +602,7 @@ export default function DashboardPage() {
 
               const origin = load.origin_location ? parseLocation(load.origin_location) : { city: load.origin?.city || "N/A", state: load.origin?.state || "N/A" };
               const destination = load.destination_location ? parseLocation(load.destination_location) : { city: load.destination?.city || "N/A", state: load.destination?.state || "N/A" };
-              
+
               // Map status
               const getStatusVariant = (status: string) => {
                 if (status === "open-load") return "pending";

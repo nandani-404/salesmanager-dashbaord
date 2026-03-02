@@ -30,8 +30,8 @@ apiClient.interceptors.response.use(
         if (error.response && error.response.status === 401) {
             Cookies.remove("token");
             Cookies.remove("user");
-            // Optional: Redirect to login page
-            // window.location.href = "/auth/login";
+            // Return a resolved empty response so components handle it gracefully
+            return Promise.resolve({ data: { status: false, data: null, message: "Unauthorized" } });
         }
         return Promise.reject(error);
     }

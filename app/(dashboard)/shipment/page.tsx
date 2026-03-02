@@ -36,6 +36,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import apiClient from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/config/page";
+import EmptyState from "@/components/ui/EmptyState";
 
 // Helper function to format date as dd/mm/yy
 const formatDateShort = (dateString: string) => {
@@ -79,7 +80,7 @@ export default function ShipmentPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
-  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "confirmed" | "in-transit" | "delivered">("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "accepted" | "in-transit" | "delivered">("all");
   const [showFilters, setShowFilters] = useState(false);
   const [flippedCards, setFlippedCards] = useState<{ [key: string]: boolean }>({});
   const [currentPage, setCurrentPage] = useState(1);
@@ -107,8 +108,8 @@ export default function ShipmentPage() {
     if (!data) return [];
     return data.loads.map((load) => {
       // Map statuses
-      let uiStatus: "pending" | "confirmed" | "in-transit" | "delivered" = "pending";
-      if (load.status === "accepted") uiStatus = "confirmed";
+      let uiStatus: "pending" | "accepted" | "in-transit" | "delivered" = "pending";
+      if (load.status === "accepted") uiStatus = "accepted";
       else if (load.status === "in-transit") uiStatus = "in-transit";
       else if (load.status === "delivered") uiStatus = "delivered";
       else uiStatus = "pending"; // default for open-load or others
@@ -168,11 +169,11 @@ export default function ShipmentPage() {
 
   // Calculate stats from real data
   const stats = useMemo(() => {
-    if (!data) return { total: 0, pending: 0, confirmed: 0, inTransit: 0 };
+    if (!data) return { total: 0, pending: 0, accepted: 0, inTransit: 0 };
     return {
       total: data.total_loads,
       pending: data.loads.filter(l => l.status === "open-load").length,
-      confirmed: data.loads.filter(l => l.status === "accepted").length,
+      accepted: data.loads.filter(l => l.status === "accepted").length,
       inTransit: data.loads.filter(l => l.status === "in-transit").length,
     };
   }, [data]);
@@ -256,14 +257,14 @@ export default function ShipmentPage() {
             <div className="p-5">
               <div className="flex items-center justify-between mb-2">
                 <UserCheck className="h-8 w-8 opacity-80" />
-                <span className="text-xs font-semibold bg-white/20 px-2 py-1 rounded-full">Confirmed</span>
+                <span className="text-xs font-semibold bg-white/20 px-2 py-1 rounded-full">Accepted</span>
               </div>
               {loading ? (
                 <div className="h-8 w-16 bg-white/20 animate-pulse rounded" />
               ) : (
-                <p className="text-3xl font-bold mb-1">{stats.confirmed}</p>
+                <p className="text-3xl font-bold mb-1">{stats.accepted}</p>
               )}
-              <p className="text-sm opacity-90">Confirmed Loads</p>
+              <p className="text-sm opacity-90">Accepted Loads</p>
             </div>
           </Card>
         </motion.div>
@@ -392,13 +393,13 @@ export default function ShipmentPage() {
                       Pending
                     </button>
                     <button
-                      onClick={() => setFilterStatus("confirmed")}
-                      className={`w-full text-left px-4 py-2.5 rounded-lg transition-all ${filterStatus === "confirmed"
+                      onClick={() => setFilterStatus("accepted")}
+                      className={`w-full text-left px-4 py-2.5 rounded-lg transition-all ${filterStatus === "accepted"
                         ? "bg-emerald-50 text-emerald-700 font-semibold"
                         : "text-gray-700 hover:bg-gray-50"
                         }`}
                     >
-                      Confirmed
+                      Accepted
                     </button>
                     <button
                       onClick={() => setFilterStatus("in-transit")}
@@ -443,7 +444,7 @@ export default function ShipmentPage() {
               >
                 <Card className={`overflow-hidden hover:shadow-xl transition-all duration-300 border-0 bg-white border-l-4 ${load.status === "pending"
                   ? "border-l-amber-400"
-                  : load.status === "confirmed"
+                  : load.status === "accepted"
                     ? "border-l-emerald-500"
                     : load.status === "in-transit"
                       ? "border-l-blue-500"
@@ -458,7 +459,7 @@ export default function ShipmentPage() {
                           <div className="flex items-center gap-3">
                             <div className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-sm ${load.status === "pending"
                               ? "bg-amber-50"
-                              : load.status === "confirmed"
+                              : load.status === "accepted"
                                 ? "bg-emerald-50"
                                 : load.status === "in-transit"
                                   ? "bg-blue-50"
@@ -466,7 +467,7 @@ export default function ShipmentPage() {
                               }`}>
                               <Truck className={`h-5 w-5 ${load.status === "pending"
                                 ? "text-amber-500"
-                                : load.status === "confirmed"
+                                : load.status === "accepted"
                                   ? "text-emerald-500"
                                   : load.status === "in-transit"
                                     ? "text-blue-500"
@@ -481,7 +482,7 @@ export default function ShipmentPage() {
                           <span
                             className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${load.status === "pending"
                               ? "bg-amber-100 text-amber-700"
-                              : load.status === "confirmed"
+                              : load.status === "accepted"
                                 ? "bg-emerald-100 text-emerald-700"
                                 : load.status === "in-transit"
                                   ? "bg-blue-100 text-blue-700"
@@ -554,7 +555,7 @@ export default function ShipmentPage() {
                           <div className="flex items-center gap-4">
                             <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-sm ${load.status === "pending"
                               ? "bg-amber-50"
-                              : load.status === "confirmed"
+                              : load.status === "accepted"
                                 ? "bg-emerald-50"
                                 : load.status === "in-transit"
                                   ? "bg-blue-50"
@@ -562,7 +563,7 @@ export default function ShipmentPage() {
                               }`}>
                               <Truck className={`h-6 w-6 ${load.status === "pending"
                                 ? "text-amber-500"
-                                : load.status === "confirmed"
+                                : load.status === "accepted"
                                   ? "text-emerald-500"
                                   : load.status === "in-transit"
                                     ? "text-blue-500"
@@ -575,7 +576,7 @@ export default function ShipmentPage() {
                                 <span
                                   className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${load.status === "pending"
                                     ? "bg-amber-100 text-amber-700"
-                                    : load.status === "confirmed"
+                                    : load.status === "accepted"
                                       ? "bg-emerald-100 text-emerald-700"
                                       : load.status === "in-transit"
                                         ? "bg-blue-100 text-blue-700"
@@ -688,17 +689,10 @@ export default function ShipmentPage() {
 
           {/* No Results */}
           {filteredLoads.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-16"
-            >
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
-                <Package className="h-8 w-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">No loads found</h3>
-              <p className="text-gray-500">Try adjusting your search criteria</p>
-            </motion.div>
+            <EmptyState
+              title="No loads found"
+              message="Try adjusting your search criteria"
+            />
           )}
 
           {/* Pagination Section (Matched to Truckers Page) */}

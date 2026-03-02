@@ -20,6 +20,7 @@ import {
 import { motion } from "framer-motion";
 import apiClient from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/config/page";
+import EmptyState from "@/components/ui/EmptyState";
 
 interface TruckerBid {
   id: number;
@@ -66,13 +67,13 @@ export default function TruckerBidsPage({
           const bidsResponse = await apiClient.get<any>(
             `/api/dashboard/trucker/${id}/applications`
           );
-          
+
           console.log("Bids API Response:", bidsResponse.data);
           const bidsData = bidsResponse.data?.data || [];
           console.log("Bids Data:", bidsData);
           console.log("First bid unique_id:", bidsData[0]?.unique_id);
           setBids(bidsData);
-          
+
           // Get TM ID and name from first bid if available
           if (bidsData.length > 0) {
             setTruckerUniqueId(bidsData[0].unique_id || "");
@@ -86,8 +87,8 @@ export default function TruckerBidsPage({
               if (truckerResponse.data?.trucker) {
                 setTruckerName(
                   truckerResponse.data.trucker.transport_name ||
-                    truckerResponse.data.trucker.name ||
-                    "Trucker"
+                  truckerResponse.data.trucker.name ||
+                  "Trucker"
                 );
                 setTruckerUniqueId(truckerResponse.data.trucker.unique_id || "");
               }
@@ -105,8 +106,8 @@ export default function TruckerBidsPage({
             if (truckerResponse.data?.trucker) {
               setTruckerName(
                 truckerResponse.data.trucker.transport_name ||
-                  truckerResponse.data.trucker.name ||
-                  "Trucker"
+                truckerResponse.data.trucker.name ||
+                "Trucker"
               );
               setTruckerUniqueId(truckerResponse.data.trucker.unique_id || "");
             }
@@ -119,8 +120,8 @@ export default function TruckerBidsPage({
         console.error("Failed to fetch trucker bids:", err);
         setError(
           err?.response?.data?.message ||
-            err?.message ||
-            "Failed to fetch bids"
+          err?.message ||
+          "Failed to fetch bids"
         );
       } finally {
         setLoading(false);
@@ -352,12 +353,10 @@ export default function TruckerBidsPage({
           ))}
         </div>
       ) : (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">No bids found for this trucker</p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="No Bids Found"
+          message="No bids have been placed by this trucker yet"
+        />
       )}
     </div>
   );

@@ -22,6 +22,7 @@ import {
 import { motion } from "framer-motion";
 import apiClient from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/config/page";
+import EmptyState from "@/components/ui/EmptyState";
 
 interface Application {
   id: number;
@@ -720,19 +721,10 @@ export default function ShipmentBidsPage({
           ))}
         </div>
       ) : (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center py-16"
-        >
-          <Card className="p-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
-              <User className="h-8 w-8 text-blue-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">No Applications Yet</h3>
-            <p className="text-gray-500">No truckers have applied for this load yet. Check back later for new applications.</p>
-          </Card>
-        </motion.div>
+        <EmptyState
+          title="No Applications Yet"
+          message="No truckers have applied for this load yet. Check back later for new applications."
+        />
       )}
     </div>
   );

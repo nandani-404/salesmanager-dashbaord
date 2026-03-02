@@ -7,6 +7,7 @@ import { mockLoads } from "@/lib/mock-data";
 import { formatDate } from "@/lib/utils";
 import { MapPin, Phone, AlertCircle, Clock } from "lucide-react";
 import { motion } from "framer-motion";
+import EmptyState from "@/components/ui/EmptyState";
 
 export default function InTransitPage() {
   const inTransitLoads = mockLoads.filter((load) => load.status === "in-transit");
@@ -140,11 +141,10 @@ export default function InTransitPage() {
           ))}
 
           {inTransitLoads.length === 0 && (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <p className="text-gray-500">No shipments currently in transit</p>
-              </CardContent>
-            </Card>
+            <EmptyState
+              title="No Shipments In Transit"
+              message="No shipments are currently in transit"
+            />
           )}
         </div>
       </div>

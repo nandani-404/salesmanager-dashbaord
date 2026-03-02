@@ -10,6 +10,7 @@ import { mockTruckerBids } from "@/lib/mock-trucker-bids";
 import { formatCurrency, formatDateTime, formatDate } from "@/lib/utils";
 import { API_ENDPOINTS, BASE_URL } from "@/config/page";
 import apiClient from "@/lib/api/client";
+import EmptyState from "@/components/ui/EmptyState";
 import { Shipper } from "@/lib/types";
 import SearchModal from "@/components/search/search-modal";
 import {
@@ -2246,14 +2247,10 @@ export default function ShippersPage() {
                   );
                 })()
               ) : (
-                <Card>
-                  <CardContent className="p-12 text-center">
-                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">
-                      No shipments found for this shipper
-                    </p>
-                  </CardContent>
-                </Card>
+                <EmptyState
+                  title="No Shipments Found"
+                  message="No shipments found for this shipper"
+                />
               )}
             </div>
           </motion.div>
