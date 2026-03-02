@@ -25,7 +25,7 @@ import {
 
 /* ── Inline SVG icons (avoids lucide-react barrel-export HMR bug) ── */
 
-function IndianRupeeIcon({ 654className }: { className?: string }) {
+function IndianRupeeIcon({ className }: { className?: string }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -589,54 +589,62 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent suppressHydrationWarning>
           <div className="space-y-4">
-            {(dashboardData?.recent_post_loads || mockLoads.slice(0, 5)).slice(0, 5).map((load: any) => {
-              // Parse locations
-              const parseLocation = (loc: string) => {
-                if (!loc) return { city: "N/A", state: "N/A" };
-                const parts = loc.split(",").map(p => p.trim());
-                return {
-                  city: parts[0] || "N/A",
-                  state: parts[parts.length - 2] || "N/A"
+            {(() => {
+              const recentLoadsRaw = dashboardData?.recent_post_loads;
+              const loadsArray = Array.isArray(recentLoadsRaw)
+                ? recentLoadsRaw
+                : (recentLoadsRaw?.data || recentLoadsRaw?.loads || mockLoads.slice(0, 5));
+              const safeLoads = Array.isArray(loadsArray) ? loadsArray : mockLoads.slice(0, 5);
+
+              return safeLoads.slice(0, 5).map((load: any) => {
+                // Parse locations
+                const parseLocation = (loc: string) => {
+                  if (!loc) return { city: "N/A", state: "N/A" };
+                  const parts = loc.split(",").map(p => p.trim());
+                  return {
+                    city: parts[0] || "N/A",
+                    state: parts[parts.length - 2] || "N/A"
+                  };
                 };
-              };
 
-              const origin = load.origin_location ? parseLocation(load.origin_location) : { city: load.origin?.city || "N/A", state: load.origin?.state || "N/A" };
-              const destination = load.destination_location ? parseLocation(load.destination_location) : { city: load.destination?.city || "N/A", state: load.destination?.state || "N/A" };
+                const origin = load.origin_location ? parseLocation(load.origin_location) : { city: load.origin?.city || "N/A", state: load.origin?.state || "N/A" };
+                const destination = load.destination_location ? parseLocation(load.destination_location) : { city: load.destination?.city || "N/A", state: load.destination?.state || "N/A" };
 
-              // Map status
-              const getStatusVariant = (status: string) => {
-                if (status === "open-load") return "pending";
-                if (status === "in-transit") return "in-transit";
-                if (status === "delivered") return "delivered";
-                return "default";
-              };
+                // Map status
+                const getStatusVariant = (status: string) => {
+                  if (status === "open-load") return "pending";
+                  if (status === "in-transit") return "in-transit";
+                  if (status === "delivered") return "delivered";
+                  return "default";
+                };
 
-              return (
-                <div
-                  key={load.id}
-                  className="flex items-center justify-between border-b border-gray-100 pb-4 last:border-0 last:pb-0"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <p className="font-medium text-gray-700">{load.load_id || load.loadNumber}</p>
-                      <Badge variant={getStatusVariant(load.status)}>{load.status}</Badge>
+                return (
+                  <div
+                    key={load.id}
+                    className="flex items-center justify-between border-b border-gray-100 pb-4 last:border-0 last:pb-0"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <p className="font-medium text-gray-700">{load.load_id || load.loadNumber}</p>
+                        <Badge variant={getStatusVariant(load.status)}>{load.status}</Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-gray-600">
+                        {origin.city}, {origin.state} → {destination.city}, {destination.state}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Pickup: {load.picup_date || load.pickup_date || (load.pickupDate ? formatDate(load.pickupDate) : "N/A")}
+                      </p>
                     </div>
-                    <p className="mt-1 text-sm text-gray-600">
-                      {origin.city}, {origin.state} → {destination.city}, {destination.state}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Pickup: {load.picup_date || load.pickup_date || formatDate(load.pickupDate)}
-                    </p>
+                    <div className="text-right">
+                      <p className="font-semibold text-gray-700">
+                        {load.shipper_price ? `₹${parseFloat(load.shipper_price).toLocaleString('en-IN')}` : formatCurrency(load.revenue)}
+                      </p>
+                      <p className="text-sm text-gray-600">{load.company_name || load.shipperName || "N/A"}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-gray-700">
-                      {load.shipper_price ? `₹${parseFloat(load.shipper_price).toLocaleString('en-IN')}` : formatCurrency(load.revenue)}
-                    </p>
-                    <p className="text-sm text-gray-600">{load.company_name || load.shipperName}</p>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         </CardContent>
       </Card>
